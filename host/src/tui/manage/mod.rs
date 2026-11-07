@@ -7,6 +7,7 @@
 
 mod agent;
 mod analytics;
+mod board;
 mod bot_chat;
 mod dev_servers;
 mod fields;
@@ -25,6 +26,7 @@ mod skill;
 mod when;
 
 pub use analytics::AnalyticsSheet;
+pub use board::heading as task_heading;
 pub use dev_servers::{DevServer, DevServerSummary, DevServersSheet, LogsView, summary as dev_server_summary};
 pub use fields::{handoff_fields, section_fields};
 pub use gear::{Gear, GearRow};
@@ -61,6 +63,10 @@ pub enum Reply {
     RoutineSaved,
     /// A bot's Library (`library {botId}`).
     Library(String),
+    /// The team board (`tasks`).
+    Board,
+    /// A board change; its `task` event updates the board.
+    BoardChanged,
     /// What an agent brings on its own (`agentGear`), for its sign-in sheet.
     Gear(String),
     /// A routine's webhook URL and key: copied as a ready-to-run curl.
@@ -109,6 +115,13 @@ pub struct BotChatSheet {
 }
 
 /// A bot's Library tab: its artifacts and the files shared in its chat, newest first.
+/// The team board: its tasks (`None` until `tasks` answers), the row under the cursor and the one unfolded.
+pub struct BoardSheet {
+    pub tasks: Option<Vec<crate::board::Task>>,
+    pub cursor: usize,
+    pub expanded: Option<String>,
+}
+
 pub struct Library {
     pub bot: String,
     pub items: Option<Vec<LibraryItem>>,
@@ -221,6 +234,13 @@ pub enum Submit {
     RenameArtifact {
         bot: String,
         artifact: String,
+    },
+    NewTask,
+    NoteTask(String),
+    /// A task and the bots its choices name, in order.
+    AssignTask {
+        task: String,
+        bots: Vec<String>,
     },
 }
 

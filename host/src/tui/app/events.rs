@@ -71,6 +71,7 @@ impl App {
                 self.memory_moved(&v["bot"]);
             }
             Some("artifact") => self.artifact_changed(&v["artifact"]),
+            Some("task") => self.task_changed(&v["task"]),
             Some("entry") => {
                 if let Some((bot, e)) = Entry::parse(&v["entry"])
                     && !self.outside_window(&bot, &e)

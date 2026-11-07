@@ -147,6 +147,7 @@ pub(super) fn overlay(buf: &mut Buffer, area: Rect, app: &mut App, top: &Overlay
         Overlay::Routines(l) => super::super::sheets::routines(buf, area, app, l),
         Overlay::Routine(f) => super::super::sheets::routine(buf, area, f),
         Overlay::Library(l) => super::super::sheets::library(buf, area, app, l),
+        Overlay::Board(b) => super::super::sheets::board(buf, area, app, b),
         Overlay::Gear(g) => super::super::sheets::gear(buf, area, app, g),
         Overlay::Market(m) => super::super::sheets::market(buf, area, app, m),
         Overlay::Agent(a) => super::super::sheets::agent(buf, area, app, a),

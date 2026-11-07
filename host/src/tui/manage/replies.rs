@@ -94,6 +94,9 @@ impl App {
                 }
             }
             Reply::Library(bot) => self.library_loaded(&bot, v["items"].as_array().map_or(&[], Vec::as_slice)),
+            Reply::Board => self.board_loaded(&v),
+            // Its `task` event brings the change.
+            Reply::BoardChanged => {}
             Reply::Gear(backend) => {
                 let lists = super::gear::GearLists {
                     skills: super::gear::items(&v["skills"]),
@@ -402,6 +405,7 @@ impl App {
                 Overlay::Library(l) => {
                     calls.push(("library", json!({"botId": l.bot}), After::Sheet(Reply::Library(l.bot.clone()))));
                 }
+                Overlay::Board(_) => calls.push(("tasks", json!({}), After::Sheet(Reply::Board))),
                 Overlay::Gear(gear) => gear_ids.push(gear.backend.clone()),
                 Overlay::Market(_) | Overlay::Form(_) => {
                     calls.push(("connectors", json!({}), After::Connectors));

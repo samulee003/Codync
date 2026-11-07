@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::time::Instant;
 
 use super::super::manage::{
-    AgentSetup, AnalyticsSheet, BotChatSheet, DevServersSheet, Fields, Gear, Library, Market, MemorySheet,
+    AgentSetup, AnalyticsSheet, BoardSheet, BotChatSheet, DevServersSheet, Fields, Gear, Library, Market, MemorySheet,
     NetworkSheet, RoutineForm, RoutineList, SkillSheet,
 };
 use super::{Editor, Mark};
@@ -53,6 +53,7 @@ pub enum Action {
     Memory,
     Details,
     Library,
+    Board,
     RefreshAgents,
     Pair,
     Network,
@@ -66,13 +67,14 @@ pub enum Action {
     Appearance(super::super::appearance::Appearance),
 }
 
-pub const ACTIONS: [(&str, &str, Action); 19] = [
+pub const ACTIONS: [(&str, &str, Action); 20] = [
     ("New bot…", "n", Action::NewBot),
     ("New group chat…", "m", Action::NewGroup),
     ("Extensions: agents, connectors, skills…", "A", Action::Market),
     ("Memory of this bot…", "M", Action::Memory),
     ("Details of this bot…", "R", Action::Details),
     ("Library of this bot: artifacts and files…", "L", Action::Library),
+    ("Team board: tasks your bots share…", "B", Action::Board),
     ("Refresh agents", "", Action::RefreshAgents),
     ("Pair a phone…", "P", Action::Pair),
     ("Network: your other computers…", "N", Action::Network),
@@ -342,6 +344,7 @@ pub enum Overlay {
     Routines(RoutineList),
     Routine(Box<RoutineForm>),
     Library(Library),
+    Board(BoardSheet),
     Gear(Gear),
     Market(Box<Market>),
     Agent(AgentSetup),

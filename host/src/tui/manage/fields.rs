@@ -101,6 +101,14 @@ impl App {
                 let body = json!({"botId": bot, "artifactId": artifact, "title": values["title"]});
                 self.sheet("renameArtifact", body, Reply::FieldsSaved);
             }
+            Submit::NewTask => self.sheet("createTask", Value::Object(values), Reply::FieldsSaved),
+            Submit::NoteTask(task) => {
+                self.sheet("noteTask", json!({"taskId": task, "text": values["text"]}), Reply::FieldsSaved);
+            }
+            Submit::AssignTask { task, bots } => {
+                let bot = bots.get(f.choice).cloned().unwrap_or_default();
+                self.sheet("assignTask", json!({"taskId": task, "botId": bot}), Reply::FieldsSaved);
+            }
         }
     }
 }
