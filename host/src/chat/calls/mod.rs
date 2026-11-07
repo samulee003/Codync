@@ -8,7 +8,7 @@
 
 mod announce;
 pub mod context;
-mod project;
+pub(crate) mod project;
 mod speech;
 mod sweep;
 pub mod tools;

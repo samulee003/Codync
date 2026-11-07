@@ -79,6 +79,7 @@ pub struct Hub {
     pub analytics: crate::analytics::Analytics,
     pub routines: crate::routines::Routines,
     pub team: crate::chat::team::Requests,
+    pub board: crate::board::Board,
     pub groups: crate::chat::group::Rooms,
     /// The user's other computers (codync-network), once this one is in a network.
     pub network: crate::network::Network,
@@ -136,6 +137,7 @@ impl Hub {
             analytics: crate::analytics::Analytics::load(&store),
             routines: crate::routines::Routines::default(),
             team: crate::chat::team::Requests::default(),
+            board: crate::board::Board::default(),
             groups: crate::chat::group::Rooms::default(),
             network: crate::network::Network::default(),
             waiting: crate::chat::team::remote::Waiting::default(),

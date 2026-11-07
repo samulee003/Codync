@@ -109,6 +109,8 @@ pub enum Event {
     SkillWritten,
     /// A bot's `publish_artifact`.
     ArtifactPublished,
+    /// A team board change, by the user (an app) or a bot (`board`): `action` and `by`, never a task's text.
+    TaskChanged,
     CredentialSaved,
     AgentSetupStarted,
     AgentSignedIn,
@@ -186,6 +188,7 @@ impl Event {
             Self::SkillRemoved => "skill_removed",
             Self::SkillWritten => "skill_written",
             Self::ArtifactPublished => "artifact_published",
+            Self::TaskChanged => "task_changed",
             Self::CredentialSaved => "credential_saved",
             Self::AgentSetupStarted => "agent_setup_started",
             Self::AgentSignedIn => "agent_signed_in",

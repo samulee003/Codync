@@ -5,6 +5,7 @@ mod analytics;
 mod analytics_cli;
 mod api;
 mod background;
+mod board;
 mod chat;
 mod cloud_cli;
 mod compat;

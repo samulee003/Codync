@@ -165,6 +165,26 @@ fn call_event(method: &str, b: &Value, p: &mut Map<String, Value>) -> Option<Eve
             p.insert("change".into(), (if update { "update" } else { "new" }).into());
             Event::ArtifactPublished
         }
+        // The team board (`board`): what changed and who changed it, never a task's text.
+        "createTask" | "editTask" | "noteTask" | "assignTask" | "setTaskStatus" | "mergeTask" | "deleteTask" => {
+            let action = match method {
+                "setTaskStatus" => b["status"].as_str().filter(|s| matches!(*s, "open" | "done" | "cancelled")),
+                other => other.strip_suffix("Task"),
+            };
+            p.insert("action".into(), action.unwrap_or("other").into());
+            p.insert("by".into(), "user".into());
+            Event::TaskChanged
+        }
+        "teamCall"
+            if b["name"].as_str().is_some_and(|n| {
+                crate::board::tools::TOOLS.contains(&n) && !n.starts_with("list") && !n.starts_with("read")
+            }) =>
+        {
+            let name = b["name"].as_str().unwrap_or_default();
+            p.insert("action".into(), name.strip_suffix("_task").unwrap_or("other").into());
+            p.insert("by".into(), "bot".into());
+            Event::TaskChanged
+        }
         "agentSetup" | "agentAuthenticate" => {
             // An agent's catalog id; Node.js setup names none.
             if let Some(agent) = b["backend"].as_str().filter(|a| !a.is_empty()) {

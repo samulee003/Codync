@@ -45,6 +45,10 @@ act on a control by its element_token, then look again. Use pixel coordinates on
 Never type a password yourself: use type_login with a saved login (request_login asks the user for one). \
 Don't approve payments: ask the user to do that from their phone.";
 
+/// The `team` server's instructions: other bots, then the team board.
+static TEAM_INSTRUCTIONS: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| format!("{}{}", crate::chat::team::INSTRUCTIONS, crate::board::tools::INSTRUCTIONS));
+
 /// Serves MCP on stdio until the agent closes it.
 pub async fn serve(bot: String, port: u16, server: Server) -> Result<()> {
     let token = std::fs::read_to_string(crate::service::data_dir().join("token")).unwrap_or_default();
@@ -82,7 +86,7 @@ pub async fn serve(bot: String, port: u16, server: Server) -> Result<()> {
             }
             ("codync-chat", crate::chat::outbox::INSTRUCTIONS, tools)
         }
-        Server::Team => ("codync-team", crate::chat::team::INSTRUCTIONS, crate::chat::team::tools()),
+        Server::Team => ("codync-team", TEAM_INSTRUCTIONS.as_str(), crate::chat::team::tools()),
         Server::Manage => ("codync-manage", crate::chat::manage::INSTRUCTIONS, crate::chat::manage::tools()),
         Server::Memory => ("codync-memory", crate::chat::memory::INSTRUCTIONS, crate::chat::memory::tools()),
         Server::Composio => {
