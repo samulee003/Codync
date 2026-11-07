@@ -137,6 +137,8 @@ extension BotStore {
             network = view
         case let .artifact(artifact):
             artifacts.upsert(artifact)
+        case let .task(task):
+            upsertTask(task)
         case .resync:
             restartEvents()
         case let .undecodable(type):

@@ -14,6 +14,8 @@ struct BotListView: View {
     @State private var editing: EditTarget?
     @State private var editingGroup: GroupTarget?
     @State private var confirmDelete: RosterItem?
+    /// The computer whose team board is open.
+    @State private var board: BoardTarget?
     /// What the section name dialog names while it's open.
     @State private var naming: SectionNaming?
     /// The row that's lifted (a `RosterLine` id): a bot to drag or for its menu, or a computer's heading.
@@ -188,6 +190,12 @@ struct BotListView: View {
                 ComputerFilterHeader(accounts: accounts, hidden: $hiddenComputers) { app.showComputers = true }
             }
             ToolbarItem(placement: .topBarTrailing) {
+                // Bots share a board per computer: the first connected one whose host has it.
+                if let store = onlineStores.first(where: \.hasBoard) {
+                    Button(L10n.tr("Team board"), systemImage: "checklist") { board = BoardTarget(computerId: store.computer.id) }
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 // A native menu: the bar hosts toolbar buttons outside SwiftUI's layout,
                 // so an anchored Codync menu can't find where the button is.
                 Menu(L10n.tr("New"), systemImage: "plus") {
@@ -229,6 +237,11 @@ struct BotListView: View {
                 guard let botId = store.selection else { continue }
                 store.selection = nil
                 accounts.selection = BotReference(accountId: accounts.accountId, computerId: store.computer.id, botId: botId)
+            }
+        }
+        .codyncSheet(item: $board) { target in
+            if let store = accounts.store(for: target.computerId) {
+                BoardView().environment(store)
             }
         }
         .codyncSheet(item: $editing) { target in

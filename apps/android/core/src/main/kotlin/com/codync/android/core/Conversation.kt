@@ -162,6 +162,8 @@ sealed interface MirrorEvent {
     data class Screen(val value: JsonObject) : MirrorEvent
     /** An artifact was published, updated or renamed (the catch-up replays it too), never a checkpoint. */
     data class ArtifactChanged(val artifact: Artifact) : MirrorEvent
+    /** A team board task was added, changed or deleted (`deleted`; the catch-up replays it too), never a checkpoint. */
+    data class TaskChanged(val task: BoardTask) : MirrorEvent
     /** For the voice of a call on this device: live only, never a checkpoint. */
     data class Call(val cue: CallCue) : MirrorEvent
     /** The computer's network changed: live only, never a checkpoint. */
@@ -182,6 +184,8 @@ sealed interface MirrorEvent {
             "screen" -> Screen(value.getValue("screen").jsonObject)
             // One this app can't read is passed over rather than fetching everything again: a card or the Library reads it again.
             "artifact" -> runCatching { ArtifactChanged(Artifact.decode(value.getValue("artifact"))) }.getOrDefault(Ignored)
+            // Passed over when unreadable: the board reads `tasks` whenever it opens.
+            "task" -> runCatching { TaskChanged(BoardTask.decode(value.getValue("task"))) }.getOrDefault(Ignored)
             "call" -> CallCue.decode(value)?.let(::Call) ?: Ignored
             // One this app can't read is passed over: the next stream's hello carries the view again.
             "network" -> runCatching { Network(NetworkView.decode(value.getValue("network"))) }.getOrDefault(Ignored)

@@ -8,8 +8,10 @@ a version without one gets a generic "Bug fixes and improvements" line. Delete o
 
 ## 2.41.0
 ### zh-Hant
+- 新增團隊任務板：在 bot 列表點清單按鈕，就能新增任務、指派給 bot，並查看 bot 認領、記錄和完成的進度。git 專案裡的任務會各自用獨立的分支工作，完成後可以直接在任務板上合併。
 - 電腦上有多個 bot 同時操作時，每一個都會顯示正在使用電腦的標記。
 ### en-US
+- New team board: tap the checklist button on the bot list to add tasks, assign them to bots, and follow as bots claim, note and finish them. Tasks in a git project each work on their own branch, which you merge right from the board.
 - Every bot that is using the computer at the same time now shows the in-use marker, not just one.
 
 ## 2.40.3

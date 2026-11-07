@@ -83,6 +83,8 @@ public final class BotStore {
     @ObservationIgnored var composerPasted: [String: [String]] = [:]
     public let fileDownloads = FileDownloads()
     var artifacts = ArtifactCache()
+    /// The computer's team board, by task id (`tasks` and the `task` events).
+    public internal(set) var tasks: [String: BoardTask] = [:]
     public var lastError: String?
     /// The open conversation (navigation path).
     public var selection: String?

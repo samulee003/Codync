@@ -11,6 +11,8 @@ public enum HostEvent: Sendable {
     case screen(ScreenState)
     /// An artifact published or renamed (the catch-up replays it too).
     case artifact(Artifact)
+    /// A team board task added, changed or deleted (`deleted`; the catch-up replays it too).
+    case task(BoardTask)
     /// For the voice of a call on this device (only the device holding the call receives it).
     case call(CallCue)
     /// The computer's network changed (members, roles, presence, offered bots, cloud assistants).
@@ -104,6 +106,7 @@ public struct HostClient: Sendable {
         struct UsageWrap: Decodable { var usage: Usage }
         struct ScreenWrap: Decodable { var screen: ScreenState }
         struct ArtifactWrap: Decodable { var artifact: Artifact }
+        struct TaskWrap: Decodable { var task: BoardTask }
         struct NetworkWrap: Decodable { var network: NetworkView }
         let d = decoder
         guard let env = try? d.decode(Envelope.self, from: data) else { return nil }
@@ -130,6 +133,9 @@ public struct HostClient: Sendable {
         case "artifact":
             // Not worth a rewind: a card or the Library reads the artifact again.
             return (try? d.decode(ArtifactWrap.self, from: data)).map { .artifact($0.artifact) }
+        case "task":
+            // Not worth a rewind: the board reads `tasks` whenever it opens.
+            return (try? d.decode(TaskWrap.self, from: data)).map { .task($0.task) }
         case "call":
             return (try? d.decode(CallCue.self, from: data)).map { .call($0) }
         case "network":
