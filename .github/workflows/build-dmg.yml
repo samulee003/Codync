@@ -14,9 +14,6 @@ on:
   push:
     tags:
       - 'v*'
-    # Temporary: builds this branch's DMG as an artifact (the session can't dispatch workflows). Removed after the build.
-    branches:
-      - 'claude/determined-gauss-xiszp0'
 
 permissions:
   contents: write
