@@ -51,21 +51,25 @@ impl Screen {
         cfg!(windows) || self.enabled()
     }
 
-    /// Marks `bot` as the one using the computer. Returns whether that's news.
-    fn claim(&self, bot: &str, read_only: bool) -> Result<bool> {
+    /// Marks `bot` as using the computer. Returns whether that's news. With `shared` (a backend
+    /// that acts in the background, so bots don't fight over the pointer and focus) any number of
+    /// bots may work at once; otherwise one bot at a time. A phone takeover blocks both.
+    fn claim(&self, bot: &str, read_only: bool, shared: bool) -> Result<bool> {
         let mut c = self.control.locked();
         if c.user && !read_only {
             bail!(
                 "The user has taken over the screen from their phone. Wait until they hand it back, or ask them what to do."
             );
         }
-        if let Some(other) = c.active_agent()
+        if !shared
+            && let Some(other) = c.active_agent()
             && other != bot
         {
             bail!("Another bot is using the computer right now. Try again in a minute.");
         }
-        let fresh = c.active_agent().is_none();
-        c.agent = Some((bot.to_owned(), Instant::now()));
+        let fresh = !c.is_active(bot);
+        c.agents.retain(|_, t| t.elapsed() < AGENT_HOLD);
+        c.agents.insert(bot.to_owned(), Instant::now());
         Ok(fresh)
     }
 }
@@ -105,7 +109,7 @@ pub async fn computer(hub: &Arc<Hub>, bot: &str, name: &str, args: Value) -> Res
         #[cfg(target_os = "linux")]
         Backend::Helper => helper_tools::read_only(name),
     };
-    if screen.claim(bot, read_only)? {
+    if screen.claim(bot, read_only, matches!(backend, Backend::AgentDesktop))? {
         screen.emit();
         let screen = screen.clone();
         tokio::spawn(async move {
@@ -225,12 +229,24 @@ mod tests {
     fn user_takeover_blocks_bot_actions_but_not_looking() {
         let (tx, _) = broadcast::channel(8);
         let s = Screen::new(Some(true), tx);
-        assert!(s.claim("a", false).unwrap());
-        assert!(!s.claim("a", false).unwrap());
-        assert!(s.claim("b", true).is_err(), "one bot at a time");
+        assert!(s.claim("a", false, false).unwrap());
+        assert!(!s.claim("a", false, false).unwrap());
+        assert!(s.claim("b", true, false).is_err(), "one bot at a time");
         s.takeover(true);
-        assert!(s.claim("a", false).is_err());
-        assert!(s.claim("a", true).is_ok());
+        assert!(s.claim("a", false, false).is_err());
+        assert!(s.claim("a", true, false).is_ok());
+    }
+
+    #[test]
+    fn background_drivers_let_bots_work_at_once() {
+        let (tx, _) = broadcast::channel(8);
+        let s = Screen::new(Some(true), tx);
+        assert!(s.claim("a", false, true).unwrap());
+        assert!(s.claim("b", false, true).unwrap(), "a second bot is news too");
+        assert!(!s.claim("a", false, true).unwrap());
+        s.takeover(true);
+        assert!(s.claim("a", false, true).is_err(), "a phone takeover still stops every bot");
+        assert!(s.claim("b", true, true).is_ok(), "but they may look");
     }
 
     #[test]

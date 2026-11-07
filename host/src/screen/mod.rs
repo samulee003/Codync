@@ -73,13 +73,18 @@ const KV_ENABLED: &str = "screen_enabled";
 struct Control {
     /// The phone took over: bots may only look.
     user: bool,
-    /// The bot using the computer, and when it last did.
-    agent: Option<(String, Instant)>,
+    /// The bots using the computer, and when each last did.
+    agents: HashMap<String, Instant>,
 }
 
 impl Control {
+    /// The bot that used the computer most recently, while it still counts as using it.
     fn active_agent(&self) -> Option<&str> {
-        self.agent.as_ref().filter(|(_, t)| t.elapsed() < AGENT_HOLD).map(|(b, _)| b.as_str())
+        self.agents.iter().filter(|(_, t)| t.elapsed() < AGENT_HOLD).max_by_key(|(_, t)| **t).map(|(b, _)| b.as_str())
+    }
+
+    fn is_active(&self, bot: &str) -> bool {
+        self.agents.get(bot).is_some_and(|t| t.elapsed() < AGENT_HOLD)
     }
 }
 
