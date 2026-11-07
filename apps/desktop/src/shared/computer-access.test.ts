@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { computerAccessStep, shouldSyncScreenAgent } from './computer-access.ts'
-import type { ScreenState } from './models.ts'
+import { normalizeScreen, type ScreenState } from './models.ts'
 
-const screen: ScreenState = { enabled: true, connected: true, capture: false, input: false, platform: 'macos', displays: [], userControl: false, agentBot: null, computerUse: true, viewers: 0 }
+const screen: ScreenState = { enabled: true, connected: true, capture: false, input: false, platform: 'macos', displays: [], userControl: false, agentBot: null, agentBots: [], computerUse: true, viewers: 0 }
 const agent = { available: true, needsApproval: false, registered: true }
 
 test('startup never registers a fresh helper, but an app update restores an existing choice', () => {
@@ -33,4 +33,10 @@ test('Linux requests a portal session and Windows never asks for macOS grants', 
   assert.equal(computerAccessStep('linux', true, { ...screen, capture: true }, null), 'portal')
   assert.equal(computerAccessStep('linux', true, { ...screen, capture: true, input: true }, null), 'ready')
   assert.equal(computerAccessStep('win32', true, { ...screen, connected: false, enabled: false }, null), 'ready')
+})
+
+test('the screen state lists every bot using the computer, and an older host sends one', () => {
+  assert.deepEqual(normalizeScreen({ agentBot: 'b1', agentBots: ['b1', 'b2'] })?.agentBots, ['b1', 'b2'])
+  assert.deepEqual(normalizeScreen({ agentBot: 'b1' })?.agentBots, ['b1'])
+  assert.deepEqual(normalizeScreen({})?.agentBots, [])
 })

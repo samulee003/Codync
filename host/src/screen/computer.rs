@@ -243,6 +243,7 @@ mod tests {
         let s = Screen::new(Some(true), tx);
         assert!(s.claim("a", false, true).unwrap());
         assert!(s.claim("b", false, true).unwrap(), "a second bot is news too");
+        assert_eq!(s.control.locked().active_agents(), ["a", "b"]);
         assert!(!s.claim("a", false, true).unwrap());
         s.takeover(true);
         assert!(s.claim("a", false, true).is_err(), "a phone takeover still stops every bot");

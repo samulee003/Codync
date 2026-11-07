@@ -167,7 +167,7 @@ import com.kyant.shapes.Capsule
         // The corner is the computer: it pulses while this bot is operating it (watch, then take over).
         val screen = state.screen
         if (screen != null) {
-            val operating = screen.agentBot == bot.id
+            val operating = screen.isOperating(bot.id)
             ComputerButton(operating, Modifier.align(Alignment.CenterEnd)) { store.openScreen(bot.id.takeIf { operating }) }
         }
     }

@@ -479,6 +479,8 @@ export interface ScreenState {
   displays: ScreenDisplay[]
   userControl: boolean
   agentBot?: string | null
+  /** Every bot using the computer right now (several can at once); older hosts send only `agentBot`. */
+  agentBots?: string[]
   /** Bots with computer use can act here (Windows: always; elsewhere Remote screen is on). */
   computerUse: boolean
   viewers: number
@@ -496,6 +498,7 @@ export function normalizeScreen(raw: Partial<ScreenState> | undefined | null): S
     displays: raw.displays ?? [],
     userControl: raw.userControl ?? false,
     agentBot: raw.agentBot ?? null,
+    agentBots: raw.agentBots ?? (raw.agentBot ? [raw.agentBot] : []),
     computerUse: raw.computerUse ?? false,
     viewers: raw.viewers ?? 0,
   }

@@ -17,12 +17,15 @@ public struct ScreenState: Codable, Equatable, Sendable {
     public var userControl = false
     /// The bot using the computer right now.
     public var agentBot: String?
+    /// Every bot using the computer right now (several can at once); older hosts send only `agentBot`.
+    public var agentBots: [String] = []
     /// Bots with computer use can act here (Windows: always; elsewhere Remote screen is on).
     public var computerUse = false
     public var viewers = 0
 
     public init() {}
 
+    public func isOperating(_ botId: String) -> Bool { agentBots.contains(botId) }
     public var available: Bool { enabled && connected && capture }
     public var controlReady: Bool { platform == "windows" ? computerUse : available && input }
     public var mainDisplay: ScreenDisplay? { displays.first(where: \.main) ?? displays.first }
@@ -38,6 +41,7 @@ public struct ScreenState: Codable, Equatable, Sendable {
         displays = try c.decodeIfPresent([ScreenDisplay].self, forKey: .displays) ?? []
         userControl = try c.decodeIfPresent(Bool.self, forKey: .userControl) ?? false
         agentBot = try c.decodeIfPresent(String.self, forKey: .agentBot)
+        agentBots = try c.decodeIfPresent([String].self, forKey: .agentBots) ?? agentBot.map { [$0] } ?? []
         computerUse = try c.decodeIfPresent(Bool.self, forKey: .computerUse) ?? false
         viewers = try c.decodeIfPresent(Int.self, forKey: .viewers) ?? 0
     }

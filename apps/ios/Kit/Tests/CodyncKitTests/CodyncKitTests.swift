@@ -31,6 +31,12 @@ import Testing
     let e = HostClient.parseEvent(Data(#"{"type":"screen","screen":{"enabled":true,"connected":true,"capture":true,"displays":[{"id":1,"name":"Built-in","width":1512,"height":982,"main":true}],"agentBot":"b1"}}"#.utf8))
     guard case let .screen(s) = e else { Issue.record("screen"); return }
     #expect(s.available && s.agentBot == "b1" && s.mainDisplay?.width == 1512 && !s.userControl)
+    #expect(s.isOperating("b1"), "an older host's single bot counts")
+}
+
+@Test func screenStateListsEveryOperatingBot() throws {
+    let s = try JSONDecoder().decode(ScreenState.self, from: Data(#"{"agentBot":"b1","agentBots":["b1","b2"]}"#.utf8))
+    #expect(s.isOperating("b1") && s.isOperating("b2") && !s.isOperating("b3"))
 }
 
 @Test func screenViewportMapsAndZooms() {

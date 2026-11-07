@@ -83,6 +83,14 @@ impl Control {
         self.agents.iter().filter(|(_, t)| t.elapsed() < AGENT_HOLD).max_by_key(|(_, t)| **t).map(|(b, _)| b.as_str())
     }
 
+    /// Every bot still counting as using the computer, in a stable order.
+    fn active_agents(&self) -> Vec<&str> {
+        let mut bots: Vec<&str> =
+            self.agents.iter().filter(|(_, t)| t.elapsed() < AGENT_HOLD).map(|(b, _)| b.as_str()).collect();
+        bots.sort_unstable();
+        bots
+    }
+
     fn is_active(&self, bot: &str) -> bool {
         self.agents.get(bot).is_some_and(|t| t.elapsed() < AGENT_HOLD)
     }
@@ -185,6 +193,7 @@ impl Screen {
             "displays": st.displays,
             "userControl": c.user,
             "agentBot": c.active_agent(),
+            "agentBots": c.active_agents(),
             "computerUse": self.computer_use(),
             "viewers": viewers,
         })

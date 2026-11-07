@@ -265,7 +265,7 @@ function logoAgent(item: RosterItem, logos: boolean): string | null {
 }
 
 function RosterBotRow({ item, compact, agent }: { item: RosterItem; compact: boolean; agent: string | null }) {
-  return <BotRow bot={item.bot} store={item.store} compact={compact} usingComputer={item.store.screen?.agentBot === item.bot.id} members={isGroup(item.bot) ? item.store.members(item.bot) : noMembers} agent={agent} />
+  return <BotRow bot={item.bot} store={item.store} compact={compact} usingComputer={item.store.screen?.agentBots?.includes(item.bot.id) === true} members={isGroup(item.bot) ? item.store.members(item.bot) : noMembers} agent={agent} />
 }
 
 /** One roster button: drags to reorder, and slides when the others move. */
