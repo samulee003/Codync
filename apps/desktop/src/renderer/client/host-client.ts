@@ -12,6 +12,7 @@ import {
   type Usage,
 } from '@shared/models'
 import type { Artifact, ArtifactChunk, LibraryItem } from '@shared/artifacts'
+import type { BoardTask, TaskStatus } from '@shared/board'
 import { parseCallCue, type CallCue } from '@shared/calls'
 import type { NetworkView } from '@shared/network'
 import { trNow } from '../lib/l10n.ts'
@@ -75,6 +76,8 @@ export type HostEvent =
   | { type: 'usage'; usage: Usage }
   /** An artifact was published, updated or renamed (the catch-up replays it too). */
   | { type: 'artifact'; artifact: Artifact }
+  /** A team board task was added, changed or deleted (`deleted`; the catch-up replays it too). */
+  | { type: 'task'; task: BoardTask }
   | { type: 'screen'; screen: ScreenState }
   | { type: 'accessRequests'; requests: AccessRequest[] }
   | { type: 'pairingRequests'; requests: PairingRequest[] }
@@ -125,6 +128,10 @@ export function parseEvent(line: string): HostEvent | null {
       const artifact = raw.artifact as Artifact | undefined
       return artifact && typeof artifact.id === 'string' && typeof artifact.botId === 'string' ? { type, artifact } : null
     }
+    case 'task': {
+      const task = raw.task as BoardTask | undefined
+      return task && typeof task.id === 'string' && typeof task.rev === 'number' ? { type, task: { ...task, notes: task.notes ?? [] } } : null
+    }
     case 'screen': {
       const screen = normalizeScreen(raw.screen as ScreenState | undefined)
       return screen ? { type, screen } : null
@@ -164,6 +171,35 @@ export class HostClient {
 
   renameArtifact(botId: string, artifactId: string, title: string): Promise<{ artifact: Artifact }> {
     return this.call('renameArtifact', { botId, artifactId, title })
+  }
+
+  tasks(): Promise<{ tasks: BoardTask[] }> {
+    return this.call('tasks')
+  }
+
+  createTask(title: string, detail: string, project: string | null): Promise<{ task: BoardTask }> {
+    return this.call('createTask', { title, detail, ...(project ? { project } : {}) })
+  }
+
+  noteTask(taskId: string, text: string): Promise<{ task: BoardTask }> {
+    return this.call('noteTask', { taskId, text })
+  }
+
+  assignTask(taskId: string, botId: string): Promise<{ task: BoardTask }> {
+    return this.call('assignTask', { taskId, botId })
+  }
+
+  setTaskStatus(taskId: string, status: TaskStatus): Promise<{ task: BoardTask }> {
+    return this.call('setTaskStatus', { taskId, status })
+  }
+
+  /** Merging runs git in the project, which can take a while on a large repository. */
+  mergeTask(taskId: string): Promise<{ task: BoardTask }> {
+    return this.call('mergeTask', { taskId }, 120_000)
+  }
+
+  deleteTask(taskId: string): Promise<{ ok: boolean }> {
+    return this.call('deleteTask', { taskId })
   }
 
   constructor(readonly transport: HostTransport) {}

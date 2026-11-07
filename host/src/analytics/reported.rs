@@ -182,6 +182,8 @@ pub enum Screen {
     Library,
     Artifact,
     Network,
+    /// The team board (`board`).
+    Board,
     #[serde(other)]
     Other,
 }

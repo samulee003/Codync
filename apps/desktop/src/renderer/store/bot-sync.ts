@@ -4,6 +4,7 @@ import { HostClient, HostError, type HostEvent } from '../client/host-client'
 import { undoOnFailure } from '../lib/undo-on-failure'
 import { BotMirror, type Connection } from './bot-mirror'
 import { Artifacts } from './artifacts'
+import { Board } from './board'
 import type { CallCue } from '@shared/calls'
 import { trNow } from '../lib/l10n.ts'
 
@@ -34,6 +35,7 @@ function keptEntries(entries: Map<string, Entry[]>, keep: (e: Entry) => boolean)
  */
 export class BotSync extends BotMirror {
   readonly artifacts = new Artifacts(() => this.changed())
+  readonly board = new Board(() => this.changed())
   /** The calls in this app, by id: each hands what the computer tells its voice to its engine. */
   readonly callCues = new Map<string, (cue: CallCue) => void>()
   /** The newest cue each call heard (`CallCue.seq`), kept across engine switches: a replayed one isn't said again. */
@@ -265,6 +267,9 @@ export class BotSync extends BotMirror {
         break
       case 'artifact':
         this.artifacts.upsert(event.artifact)
+        break
+      case 'task':
+        this.board.upsert(event.task)
         break
       case 'screen':
         this.screen = event.screen
