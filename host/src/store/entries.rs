@@ -31,21 +31,23 @@ pub(super) const NOT_REMOVED: &str = "json_extract(data, '$.removed') IS NOT 1";
 
 impl Store {
     pub fn insert_entry(&self, lane: &Lane, kind: EntryKind, turn: i64, data: &Value) -> Result<Entry> {
-        let c = self.db.locked();
-        let rev = next_rev(&c)?;
+        let mut c = self.db.locked();
+        let tx = c.transaction()?;
+        let rev = next_rev(&tx)?;
         let now = now_ms();
         let id = uuid::Uuid::new_v4().to_string();
-        let added = c.execute(
-            &format!(
+        let added = tx
+            .prepare_cached(&format!(
                 "INSERT INTO entries(id, bot_id, rev, kind, turn, data, created_at, updated_at)
                  SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7 {LIVE_CHAT}"
-            ),
-            params![id, lane.chat, rev, kind.as_str(), turn, data.to_string(), now],
-        )?;
+            ))?
+            .execute(params![id, lane.chat, rev, kind.as_str(), turn, data.to_string(), now])?;
         ensure!(added == 1, "the chat was deleted");
+        let seq = tx.last_insert_rowid();
+        tx.commit()?;
         Ok(Entry {
             id,
-            seq: c.last_insert_rowid(),
+            seq,
             bot_id: lane.chat.clone(),
             rev,
             kind: kind.as_str().to_owned(),
@@ -67,17 +69,20 @@ impl Store {
     ) -> Result<(Entry, bool)> {
         let mut c = self.db.locked();
         let tx = c.transaction()?;
-        if let Some(entry) =
-            tx.query_row(&format!("SELECT {ENTRY_COLS} FROM entries WHERE id = ?"), [id], row_entry).optional()?
-        {
+        let select_sql = format!("SELECT {ENTRY_COLS} FROM entries WHERE id = ?1");
+        if let Some(entry) = tx.prepare_cached(&select_sql)?.query_row([id], row_entry).optional()? {
             return Ok((entry, false));
         }
         let rev = next_rev(&tx)?;
         let now = now_ms();
-        let added = tx.execute(&format!("INSERT INTO entries(id, bot_id, rev, kind, turn, data, created_at, updated_at) SELECT ?1, ?2, ?3, ?4, ?7, ?5, ?6, ?6 {LIVE_CHAT}"),
-            params![id, lane.chat, rev, kind.as_str(), data.to_string(), now, turn])?;
+        let added = tx
+            .prepare_cached(&format!(
+                "INSERT INTO entries(id, bot_id, rev, kind, turn, data, created_at, updated_at)
+                 SELECT ?1, ?2, ?3, ?4, ?7, ?5, ?6, ?6 {LIVE_CHAT}"
+            ))?
+            .execute(params![id, lane.chat, rev, kind.as_str(), data.to_string(), now, turn])?;
         ensure!(added == 1, "the chat was deleted");
-        let entry = tx.query_row(&format!("SELECT {ENTRY_COLS} FROM entries WHERE id = ?"), [id], row_entry)?;
+        let entry = tx.prepare_cached(&select_sql)?.query_row([id], row_entry)?;
         tx.commit()?;
         Ok((entry, true))
     }
@@ -88,13 +93,23 @@ impl Store {
 
     /// [`Self::update_entry`] that also moves the entry into `turn` when given (a queued message on its way out).
     pub fn update_entry_turn(&self, id: &str, turn: Option<i64>, data: &Value) -> Result<Option<Entry>> {
-        let c = self.db.locked();
-        let rev = next_rev(&c)?;
-        c.execute(
-            "UPDATE entries SET rev = ?2, data = ?3, updated_at = ?4, turn = COALESCE(?5, turn) WHERE id = ?1",
-            params![id, rev, data.to_string(), now_ms(), turn],
-        )?;
-        Ok(c.query_row(&format!("SELECT {ENTRY_COLS} FROM entries WHERE id = ?1"), [id], row_entry).optional()?)
+        let mut c = self.db.locked();
+        let tx = c.transaction()?;
+        let rev = next_rev(&tx)?;
+        let changed = tx
+            .prepare_cached(
+                "UPDATE entries SET rev = ?2, data = ?3, updated_at = ?4, turn = COALESCE(?5, turn) WHERE id = ?1",
+            )?
+            .execute(params![id, rev, data.to_string(), now_ms(), turn])?;
+        if changed == 0 {
+            return Ok(None);
+        }
+        let entry = tx
+            .prepare_cached(&format!("SELECT {ENTRY_COLS} FROM entries WHERE id = ?1"))?
+            .query_row([id], row_entry)
+            .optional()?;
+        tx.commit()?;
+        Ok(entry)
     }
 
     /// Moves an entry back in time, for tests of what happens to old entries.
@@ -106,27 +121,27 @@ impl Store {
 
     pub fn entry(&self, id: &str) -> Option<Entry> {
         let c = self.db.locked();
-        let row = c.query_row(&format!("SELECT {ENTRY_COLS} FROM entries WHERE id = ?1"), [id], row_entry);
-        logged("entry", row.optional()).flatten()
+        let row = c
+            .prepare_cached(&format!("SELECT {ENTRY_COLS} FROM entries WHERE id = ?1"))
+            .and_then(|mut st| st.query_row([id], row_entry).optional());
+        logged("entry", row).flatten()
     }
 
     pub fn find_by_nonce(&self, bot_id: &str, nonce: &str) -> Option<Entry> {
         let c = self.db.locked();
-        let row = c.query_row(
-            &format!(
+        let row = c
+            .prepare_cached(&format!(
                 "SELECT {ENTRY_COLS} FROM entries WHERE bot_id = ?1 AND kind = 'user' AND json_extract(data, '$.clientNonce') = ?2"
-            ),
-            params![bot_id, nonce],
-            row_entry,
-        );
-        logged("entry by nonce", row.optional()).flatten()
+            ))
+            .and_then(|mut st| st.query_row(params![bot_id, nonce], row_entry).optional());
+        logged("entry by nonce", row).flatten()
     }
 
     /// What a voice call carried in `bot_id`'s chat (`chat::calls`), oldest first: its messages and final replies.
     /// The newest `limit` of them.
     pub fn call_entries(&self, bot_id: &str, call: &str, limit: i64) -> Result<Vec<Entry>> {
         let c = self.db.locked();
-        let mut st = c.prepare(&format!(
+        let mut st = c.prepare_cached(&format!(
             "SELECT {ENTRY_COLS} FROM entries WHERE bot_id = ?1 AND json_extract(data, '$.call') = ?2 AND
                (kind = 'user' OR (kind = 'agent' AND json_extract(data, '$.final') = 1))
              ORDER BY seq DESC LIMIT ?3"
@@ -139,7 +154,9 @@ impl Store {
 
     pub fn max_turn(&self, bot_id: &str) -> i64 {
         let c = self.db.locked();
-        let n = c.query_row("SELECT COALESCE(MAX(turn), 0) FROM entries WHERE bot_id = ?1", [bot_id], |r| r.get(0));
+        let n = c
+            .prepare_cached("SELECT COALESCE(MAX(turn), 0) FROM entries WHERE bot_id = ?1")
+            .and_then(|mut st| st.query_row([bot_id], |r| r.get(0)));
         logged("max turn", n).unwrap_or(0)
     }
 
@@ -147,34 +164,45 @@ impl Store {
     /// reading, searching, fetching and thinking don't count (ACP tool kinds).
     pub fn acted_in_turn(&self, bot_id: &str, turn: i64) -> Result<bool> {
         let c = self.db.locked();
-        Ok(c.query_row(
+        Ok(c.prepare_cached(
             "SELECT EXISTS(SELECT 1 FROM entries WHERE bot_id = ?1 AND turn = ?2 AND kind = 'tool'
              AND COALESCE(json_extract(data, '$.toolKind'), 'other') NOT IN ('read', 'search', 'fetch', 'think'))",
-            params![bot_id, turn],
-            |r| r.get(0),
-        )?)
+        )?
+        .query_row(params![bot_id, turn], |r| r.get(0))?)
     }
 
     /// Entries changed after `since`. A fresh client (`since == 0`) only gets the
     /// newest `cap` entries per bot and pages older ones in with `history`.
     pub fn entries_since(&self, since: i64, cap: i64) -> Result<Vec<Entry>> {
+        if cap <= 0 {
+            return Ok(Vec::new());
+        }
         let c = self.db.locked();
-        let sql = if since == 0 {
-            format!(
-                "SELECT {ENTRY_COLS} FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY bot_id ORDER BY seq DESC) AS rn FROM entries)
-                 WHERE rn <= ?2 AND rev > ?1 ORDER BY seq"
-            )
-        } else {
-            format!("SELECT {ENTRY_COLS} FROM entries WHERE rev > ?1 AND ?2 > 0 ORDER BY seq")
-        };
-        let mut st = c.prepare(&sql)?;
-        Ok(st.query_map(params![since, cap], row_entry)?.collect::<rusqlite::Result<_>>()?)
+        if since == 0 {
+            let bot_ids: Vec<String> = c
+                .prepare_cached("SELECT DISTINCT bot_id FROM entries")?
+                .query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            let mut st = c.prepare_cached(&format!(
+                "SELECT {ENTRY_COLS} FROM entries WHERE bot_id = ?1 AND rev > 0 ORDER BY seq DESC LIMIT ?2"
+            ))?;
+            let mut rows = Vec::new();
+            for bot_id in bot_ids {
+                for row in st.query_map(params![bot_id, cap], row_entry)? {
+                    rows.push(row?);
+                }
+            }
+            rows.sort_unstable_by_key(|e| e.seq);
+            return Ok(rows);
+        }
+        let mut st = c.prepare_cached(&format!("SELECT {ENTRY_COLS} FROM entries WHERE rev > ?1 ORDER BY seq"))?;
+        Ok(st.query_map([since], row_entry)?.collect::<rusqlite::Result<_>>()?)
     }
 
     /// Older entries of a chat, without the messages taken back: a client hears of those through `entries_since`.
     pub fn history(&self, bot_id: &str, before_seq: i64, limit: i64) -> Result<Vec<Entry>> {
         let c = self.db.locked();
-        let mut st = c.prepare(&format!(
+        let mut st = c.prepare_cached(&format!(
             "SELECT {ENTRY_COLS} FROM entries WHERE bot_id = ?1 AND seq < ?2 AND {NOT_REMOVED}
              ORDER BY seq DESC LIMIT ?3"
         ))?;
@@ -188,7 +216,7 @@ impl Store {
     // ponytail: scans the chat's entries without an index; add one if a long chat's Library gets slow.
     pub fn file_messages(&self, bot_id: &str, limit: i64) -> Result<Vec<Entry>> {
         let c = self.db.locked();
-        let mut st = c.prepare(&format!(
+        let mut st = c.prepare_cached(&format!(
             "SELECT {ENTRY_COLS} FROM entries WHERE bot_id = ?1 AND {NOT_REMOVED}
                AND (json_array_length(data, '$.files') > 0 OR json_array_length(data, '$.attachments') > 0)
              ORDER BY seq DESC LIMIT ?2"
@@ -200,7 +228,7 @@ impl Store {
     // ponytail: scans notices without an index; sign-ins are rare, add one if it shows up in profiles.
     pub fn pending_sign_ins(&self, backend: &str) -> Result<Vec<Entry>> {
         let c = self.db.locked();
-        let mut st = c.prepare(&format!(
+        let mut st = c.prepare_cached(&format!(
             "SELECT {ENTRY_COLS} FROM entries WHERE kind = 'notice'
                AND json_extract(data, '$.connectionRequest.kind') = 'agent'
                AND json_extract(data, '$.connectionRequest.status') = 'pending'
@@ -234,7 +262,7 @@ impl Store {
     /// The newest `limit` bot-to-bot notices in `bot_id`'s main chat that involve `peer_id`, oldest first.
     pub fn bot_conversation(&self, bot_id: &str, peer_id: &str, limit: i64) -> Result<Vec<Entry>> {
         let c = self.db.locked();
-        let mut st = c.prepare(&format!(
+        let mut st = c.prepare_cached(&format!(
             "SELECT {ENTRY_COLS} FROM entries WHERE bot_id = ?1 AND kind = 'notice'
                AND json_type(data, '$.botMessage') = 'object'
                AND ?2 IN (json_extract(data, '$.botMessage.sourceBotId'), json_extract(data, '$.botMessage.targetBotId'))
@@ -250,7 +278,7 @@ impl Store {
     /// user's, final replies and voice calls' transcripts. Dreaming reads these.
     pub fn conversation_since(&self, bot_id: &str, after_seq: i64, limit: i64) -> Result<Vec<Entry>> {
         let c = self.db.locked();
-        let mut st = c.prepare(&format!(
+        let mut st = c.prepare_cached(&format!(
             "SELECT {ENTRY_COLS} FROM entries WHERE bot_id = ?1 AND seq > ?2 AND {NOT_REMOVED} AND
                (kind = 'user' OR (kind = 'agent' AND json_extract(data, '$.final') = 1)
                 OR (kind = 'notice' AND json_extract(data, '$.transcript') IS NOT NULL))
@@ -262,17 +290,16 @@ impl Store {
     /// The newest entry of a bot's chat.
     pub fn last_seq(&self, bot_id: &str) -> i64 {
         let c = self.db.locked();
-        logged(
-            "last seq",
-            c.query_row("SELECT COALESCE(MAX(seq), 0) FROM entries WHERE bot_id = ?1", [bot_id], |r| r.get(0)),
-        )
-        .unwrap_or(0)
+        let n = c
+            .prepare_cached("SELECT COALESCE(MAX(seq), 0) FROM entries WHERE bot_id = ?1")
+            .and_then(|mut st| st.query_row([bot_id], |r| r.get(0)));
+        logged("last seq", n).unwrap_or(0)
     }
 
     /// Chat-visible messages (the user's, final replies) in `lane` after `after_seq`, oldest first.
     pub fn messages_after(&self, lane: &Lane, after_seq: i64, limit: i64) -> Result<Vec<Entry>> {
         let c = self.db.locked();
-        let mut st = c.prepare(&format!(
+        let mut st = c.prepare_cached(&format!(
             "SELECT {ENTRY_COLS} FROM entries WHERE bot_id = ?1 AND seq > ?2 AND {NOT_REMOVED} AND
                (kind = 'user' OR (kind = 'agent' AND json_extract(data, '$.final') = 1))
              ORDER BY seq DESC LIMIT ?3"
@@ -286,25 +313,23 @@ impl Store {
     /// The newest `kind` entry in `lane` after `after_seq`.
     pub fn last_of_kind(&self, lane: &Lane, kind: EntryKind, after_seq: i64) -> Option<Entry> {
         let c = self.db.locked();
-        let row = c.query_row(
-            &format!(
+        let row = c
+            .prepare_cached(&format!(
                 "SELECT {ENTRY_COLS} FROM entries WHERE bot_id = ?1 AND kind = ?2 AND seq > ?3 ORDER BY seq DESC LIMIT 1"
-            ),
-            params![lane.chat, kind.as_str(), after_seq],
-            row_entry,
-        );
-        logged("last entry of kind", row.optional()).flatten()
+            ))
+            .and_then(|mut st| st.query_row(params![lane.chat, kind.as_str(), after_seq], row_entry).optional());
+        logged("last entry of kind", row).flatten()
     }
 
     /// The `seq` of `bot`'s last reply in `lane` (0 if it hasn't spoken there).
     pub fn last_spoke(&self, lane: &Lane, bot: &str) -> i64 {
         let c = self.db.locked();
-        let n = c.query_row(
-            "SELECT COALESCE(MAX(seq), 0) FROM entries WHERE bot_id = ?1 AND kind = 'agent'
-               AND json_extract(data, '$.final') = 1 AND json_extract(data, '$.author') = ?2",
-            params![lane.chat, bot],
-            |r| r.get(0),
-        );
+        let n = c
+            .prepare_cached(
+                "SELECT COALESCE(MAX(seq), 0) FROM entries WHERE bot_id = ?1 AND kind = 'agent'
+                 AND json_extract(data, '$.final') = 1 AND json_extract(data, '$.author') = ?2",
+            )
+            .and_then(|mut st| st.query_row(params![lane.chat, bot], |r| r.get(0)));
         logged("last spoke", n).unwrap_or(0)
     }
 
@@ -356,6 +381,25 @@ mod tests {
     use super::*;
     use crate::store::tests::temp_store;
     use serde_json::json;
+
+    #[test]
+    fn entries_since_zero_caps_per_bot_in_seq_order() {
+        let s = temp_store();
+        let a = Lane::main("a");
+        let b = Lane::main("b");
+        let a1 = s.insert_entry(&a, EntryKind::User, 1, &json!({"text": "a1"})).unwrap();
+        let b1 = s.insert_entry(&b, EntryKind::User, 1, &json!({"text": "b1"})).unwrap();
+        let a2 = s.insert_entry(&a, EntryKind::User, 1, &json!({"text": "a2"})).unwrap();
+        let a3 = s.insert_entry(&a, EntryKind::User, 1, &json!({"text": "a3"})).unwrap();
+        let b2 = s.insert_entry(&b, EntryKind::User, 1, &json!({"text": "b2"})).unwrap();
+        let _ = a1;
+        let ids: Vec<String> = s.entries_since(0, 2).unwrap().into_iter().map(|e| e.id).collect();
+        assert_eq!(ids, [b1.id, a2.id, a3.id, b2.id]);
+        assert!(s.entries_since(0, 0).unwrap().is_empty());
+        let rev_before = s.current_rev();
+        assert!(s.update_entry("missing", &json!({"text": "x"})).unwrap().is_none());
+        assert_eq!(s.current_rev(), rev_before);
+    }
 
     #[test]
     fn history_search_matches_every_term_in_chat_messages() {

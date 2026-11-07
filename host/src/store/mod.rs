@@ -46,32 +46,36 @@ fn logged<T>(what: &str, r: rusqlite::Result<T>) -> Option<T> {
 }
 
 fn next_rev(c: &Connection) -> Result<i64> {
-    Ok(c.query_row(
+    Ok(c.prepare_cached(
         "INSERT INTO kv(k, v) VALUES('rev', '1') ON CONFLICT(k) DO UPDATE SET v = CAST(v AS INTEGER) + 1 RETURNING CAST(v AS INTEGER)",
-        [],
-        |r| r.get(0),
-    )?)
+    )?
+    .query_row([], |r| r.get(0))?)
 }
 
 impl Store {
     /// Durable control state must distinguish a missing key from a failed read.
     pub fn kv_read(&self, k: &str) -> Result<Option<String>> {
-        Ok(self.db.locked().query_row("SELECT v FROM kv WHERE k = ?", [k], |r| r.get(0)).optional()?)
+        let c = self.db.locked();
+        Ok(c.prepare_cached("SELECT v FROM kv WHERE k = ?")?.query_row([k], |r| r.get(0)).optional()?)
     }
 
     pub fn kv_get(&self, k: &str) -> Option<String> {
         let c = self.db.locked();
-        logged("kv", c.query_row("SELECT v FROM kv WHERE k = ?", [k], |r| r.get(0)).optional()).flatten()
+        let row = c
+            .prepare_cached("SELECT v FROM kv WHERE k = ?")
+            .and_then(|mut st| st.query_row([k], |r| r.get(0)).optional());
+        logged("kv", row).flatten()
     }
 
     pub fn kv_set(&self, k: &str, v: &str) -> Result<()> {
         let c = self.db.locked();
-        c.execute("INSERT INTO kv(k, v) VALUES(?1, ?2) ON CONFLICT(k) DO UPDATE SET v = ?2", params![k, v])?;
+        c.prepare_cached("INSERT INTO kv(k, v) VALUES(?1, ?2) ON CONFLICT(k) DO UPDATE SET v = ?2")?
+            .execute(params![k, v])?;
         Ok(())
     }
 
     pub fn kv_delete(&self, k: &str) -> Result<()> {
-        self.db.locked().execute("DELETE FROM kv WHERE k = ?1", [k])?;
+        self.db.locked().prepare_cached("DELETE FROM kv WHERE k = ?1")?.execute([k])?;
         Ok(())
     }
 
@@ -79,7 +83,7 @@ impl Store {
     pub fn kv_prefix(&self, prefix: &str) -> Vec<String> {
         let c = self.db.locked();
         let rows = c
-            .prepare("SELECT k FROM kv WHERE substr(k, 1, length(?1)) = ?1")
+            .prepare_cached("SELECT k FROM kv WHERE substr(k, 1, length(?1)) = ?1")
             .and_then(|mut st| st.query_map([prefix], |r| r.get(0))?.collect::<rusqlite::Result<Vec<String>>>());
         logged("kv prefix", rows).unwrap_or_default()
     }
