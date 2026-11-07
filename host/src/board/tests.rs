@@ -11,11 +11,16 @@ fn hub() -> Arc<Hub> {
     let hub = Hub::new(store, "board-test".into(), Identity::load_or_create(&dir).unwrap(), "test".into(), 0);
     for id in ["ada", "bo"] {
         let cfg: BotConfig =
-            serde_json::from_value(json!({"id": id, "name": id.to_uppercase(), "backend": "claude", "cwd": "/tmp"}))
+            serde_json::from_value(json!({"id": id, "name": id.to_uppercase(), "backend": "claude", "cwd": folder()}))
                 .unwrap();
         hub.store.save_bot(&cfg).unwrap();
     }
     hub
+}
+
+/// The bots' folder: an absolute directory on every platform.
+fn folder() -> String {
+    std::env::temp_dir().display().to_string()
 }
 
 fn new_task(hub: &Hub, title: &str, project: Option<&str>) -> Task {
@@ -40,6 +45,8 @@ fn repo() -> PathBuf {
     // The host's merge commit needs an identity, which a CI runner has none of.
     git(&dir, &["config", "user.email", "t@t"]);
     git(&dir, &["config", "user.name", "t"]);
+    // Files read back as written: Windows' git would check them out with CRLF.
+    git(&dir, &["config", "core.autocrlf", "false"]);
     std::fs::write(dir.join("a.txt"), "one\n").unwrap();
     git(&dir, &["add", "a.txt"]);
     git(&dir, &["commit", "-q", "-m", "first"]);
@@ -183,7 +190,7 @@ async fn bots_use_the_board_through_their_team_tools() {
     let made = tools::call(&hub, "ada", "create_task", &json!({"title": "Port the CLI", "project": ""})).await.unwrap();
     let id = made["task"]["id"].as_str().unwrap().to_owned();
     assert_eq!(made["task"]["createdBy"], "ADA");
-    assert_eq!(made["task"]["project"], "/tmp", "the bot's own folder by default");
+    assert_eq!(made["task"]["project"], folder(), "the bot's own folder by default");
 
     tools::call(&hub, "bo", "claim_task", &json!({"taskId": id})).await.unwrap();
     let mine = tools::call(&hub, "bo", "list_tasks", &json!({"mine": true})).await.unwrap();
