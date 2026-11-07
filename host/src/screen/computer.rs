@@ -117,7 +117,12 @@ pub async fn computer(hub: &Arc<Hub>, bot: &str, name: &str, args: Value) -> Res
             // Say when this bot stops, so phones drop its live chip even while others keep working.
             loop {
                 tokio::time::sleep(AGENT_HOLD).await;
-                if !screen.control.locked().is_active(&bot) {
+                let stopped = {
+                    let mut c = screen.control.locked();
+                    c.agents.retain(|_, t| t.elapsed() < AGENT_HOLD);
+                    !c.agents.contains_key(&bot)
+                };
+                if stopped {
                     screen.emit();
                     return;
                 }

@@ -11,6 +11,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::LazyLock;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 
@@ -20,33 +21,9 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(55);
 const MAX_TEXT: usize = 100_000;
 const DRIVER_ENV: &str = "CODYNC_COMPUTER_DRIVER";
 
-/// Whether the user asked for this driver.
-pub(super) fn selected() -> bool {
-    std::env::var(DRIVER_ENV).is_ok_and(|v| v.eq_ignore_ascii_case("agent-desktop"))
-}
-
-/// The CLI installed beside the host, else the first one on `PATH`.
-pub(super) fn executable() -> Option<PathBuf> {
-    let name = if cfg!(windows) { "agent-desktop.exe" } else { "agent-desktop" };
-    let beside = std::env::current_exe().ok()?.parent().map(|dir| dir.join(name)).filter(|p| p.is_file());
-    beside.or_else(|| {
-        let path = std::env::var_os("PATH")?;
-        std::env::split_paths(&path).map(|dir| dir.join(name)).find(|p| p.is_file())
-    })
-}
-
-fn tool(name: &str, description: &str, read_only: bool, properties: &Value, required: &[&str]) -> Value {
-    json!({
-        "name": name,
-        "description": description,
-        "inputSchema": {"type": "object", "properties": properties, "required": required},
-        "annotations": {"readOnlyHint": read_only, "destructiveHint": !read_only, "openWorldHint": true},
-    })
-}
-
 /// The tools bots get. Refs come from `desktop_snapshot` and belong to it: take a new snapshot
 /// when a call answers `STALE_REF` or `AMBIGUOUS_TARGET`.
-pub(super) fn tools() -> Vec<Value> {
+static TOOLS: LazyLock<Vec<Value>> = LazyLock::new(|| {
     let app = json!({"type": "string", "description": "Application name."});
     let target = json!({"type": "string", "description": "A ref from desktop_snapshot, like @s8f3k2p9:e8."});
     vec![
@@ -89,14 +66,42 @@ pub(super) fn tools() -> Vec<Value> {
         ),
         tool("desktop_launch", "Launch an app by name or bundle id.", false, &json!({"app": app}), &["app"]),
     ]
+});
+
+/// Whether the user asked for this driver.
+pub(super) fn selected() -> bool {
+    std::env::var(DRIVER_ENV).is_ok_and(|v| v.eq_ignore_ascii_case("agent-desktop"))
+}
+
+/// The CLI installed beside the host, else the first one on `PATH`.
+pub(super) fn executable() -> Option<PathBuf> {
+    let name = if cfg!(windows) { "agent-desktop.exe" } else { "agent-desktop" };
+    let beside = std::env::current_exe().ok()?.parent().map(|dir| dir.join(name)).filter(|p| p.is_file());
+    beside.or_else(|| {
+        let path = std::env::var_os("PATH")?;
+        std::env::split_paths(&path).map(|dir| dir.join(name)).find(|p| p.is_file())
+    })
+}
+
+fn tool(name: &str, description: &str, read_only: bool, properties: &Value, required: &[&str]) -> Value {
+    json!({
+        "name": name,
+        "description": description,
+        "inputSchema": {"type": "object", "properties": properties, "required": required},
+        "annotations": {"readOnlyHint": read_only, "destructiveHint": !read_only, "openWorldHint": true},
+    })
+}
+
+pub(super) fn tools() -> Vec<Value> {
+    TOOLS.clone()
 }
 
 pub(super) fn offered(name: &str) -> bool {
-    tools().iter().any(|t| t["name"] == name)
+    TOOLS.iter().any(|t| t["name"] == name)
 }
 
 pub(super) fn read_only(name: &str) -> bool {
-    tools().iter().any(|t| t["name"] == name && t["annotations"]["readOnlyHint"] == true)
+    TOOLS.iter().any(|t| t["name"] == name && t["annotations"]["readOnlyHint"] == true)
 }
 
 /// A string argument that can't be read as a flag.
@@ -226,13 +231,15 @@ pub(super) async fn call(bot: &str, name: &str, args: Value) -> Result<Value> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
     let mut child = cmd.spawn().with_context(|| format!("can't start {}", exe.display()))?;
-    if let (Some(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
-        pipe.write_all(text.as_bytes()).await?;
-    }
-    let output = tokio::time::timeout(CALL_TIMEOUT, child.wait_with_output())
-        .await
-        .map_err(|_| anyhow!("agent-desktop didn't answer in time"))?
-        .context("agent-desktop failed")?;
+    let output = tokio::time::timeout(CALL_TIMEOUT, async {
+        if let (Some(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
+            pipe.write_all(text.as_bytes()).await?;
+        }
+        child.wait_with_output().await
+    })
+    .await
+    .map_err(|_| anyhow!("agent-desktop didn't answer in time"))?
+    .context("agent-desktop failed")?;
     let envelope: Value = serde_json::from_slice(&output.stdout).context("agent-desktop sent no JSON")?;
     Ok(agent_content(&envelope))
 }

@@ -54,7 +54,7 @@ import com.codync.android.design.*
  */
 @Composable internal fun ScreenView(state: AppState, store: AppStore, watching: String?, close: () -> Unit) {
     val screen = state.screen
-    val agent = screen?.agentBot?.let { id -> state.bots.firstOrNull { it.id == id } }
+    val agent = screen?.operatingBot(watching)?.let { id -> state.bots.firstOrNull { it.id == id } }
     var session by remember { mutableStateOf<ScreenSession?>(null) }
     var display by remember { mutableStateOf<ScreenDisplay?>(null) }
     var interactive by remember { mutableStateOf(false) }

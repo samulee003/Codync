@@ -30,7 +30,9 @@ public struct ScreenView: View {
     }
 
     private var screen: ScreenState? { model.screen }
-    private var agent: Bot? { screen?.agentBot.flatMap { model.bots[$0] } }
+    private var agent: Bot? {
+        screen?.operatingBot(watching: watching).flatMap { model.bots[$0] }
+    }
 
     public var body: some View {
         ZStack {

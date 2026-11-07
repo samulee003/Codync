@@ -37,6 +37,8 @@ data class ScreenState(
     val viewers: Int = 0,
 ) {
     fun isOperating(botId: String): Boolean = botId in agentBots || botId == agentBot
+    fun operatingBot(watching: String? = null): String? =
+        watching?.takeIf(::isOperating) ?: agentBot ?: agentBots.firstOrNull()
     val available: Boolean get() = enabled && connected && capture
     val controlReady: Boolean get() = if (platform == "windows") computerUse else available && input
     val mainDisplay: ScreenDisplay? get() = displays.firstOrNull { it.main } ?: displays.firstOrNull()

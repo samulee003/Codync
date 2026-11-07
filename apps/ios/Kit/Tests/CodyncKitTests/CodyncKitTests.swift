@@ -37,6 +37,9 @@ import Testing
 @Test func screenStateListsEveryOperatingBot() throws {
     let s = try JSONDecoder().decode(ScreenState.self, from: Data(#"{"agentBot":"b1","agentBots":["b1","b2"]}"#.utf8))
     #expect(s.isOperating("b1") && s.isOperating("b2") && !s.isOperating("b3"))
+    #expect(s.operatingBot(watching: "b2") == "b2")
+    #expect(s.operatingBot(watching: "b3") == "b1")
+    #expect(s.operatingBot() == "b1")
 }
 
 @Test func screenViewportMapsAndZooms() {

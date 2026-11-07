@@ -26,6 +26,9 @@ public struct ScreenState: Codable, Equatable, Sendable {
     public init() {}
 
     public func isOperating(_ botId: String) -> Bool { agentBots.contains(botId) }
+    public func operatingBot(watching: String? = nil) -> String? {
+        watching.flatMap { isOperating($0) ? $0 : nil } ?? agentBot ?? agentBots.first
+    }
     public var available: Bool { enabled && connected && capture }
     public var controlReady: Bool { platform == "windows" ? computerUse : available && input }
     public var mainDisplay: ScreenDisplay? { displays.first(where: \.main) ?? displays.first }
