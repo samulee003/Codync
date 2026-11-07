@@ -112,11 +112,12 @@ pub async fn computer(hub: &Arc<Hub>, bot: &str, name: &str, args: Value) -> Res
     if screen.claim(bot, read_only, matches!(backend, Backend::AgentDesktop))? {
         screen.emit();
         let screen = screen.clone();
+        let bot = bot.to_owned();
         tokio::spawn(async move {
-            // Say when the bot stops, so phones drop the live chip.
+            // Say when this bot stops, so phones drop its live chip even while others keep working.
             loop {
                 tokio::time::sleep(AGENT_HOLD).await;
-                if screen.control.locked().active_agent().is_none() {
+                if !screen.control.locked().is_active(&bot) {
                     screen.emit();
                     return;
                 }
