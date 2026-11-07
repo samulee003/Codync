@@ -37,6 +37,9 @@ fn repo() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("codync-board-repo-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     git(&dir, &["init", "-q", "-b", "main"]);
+    // The host's merge commit needs an identity, which a CI runner has none of.
+    git(&dir, &["config", "user.email", "t@t"]);
+    git(&dir, &["config", "user.name", "t"]);
     std::fs::write(dir.join("a.txt"), "one\n").unwrap();
     git(&dir, &["add", "a.txt"]);
     git(&dir, &["commit", "-q", "-m", "first"]);
