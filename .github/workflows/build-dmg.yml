@@ -76,12 +76,16 @@ jobs:
       - name: Generate Homebrew Cask formula
         run: |
           TAG="${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
-          CLEAN_VERSION="${TAG#v}"
+          # A tag names the version (v2.41.0-custom → 2.41.0-custom); a branch build uses the app's own.
+          case "$TAG" in
+            v*) CLEAN_VERSION="${TAG#v}" ;;
+            *) CLEAN_VERSION=$(node -p "require('./apps/desktop/package.json').version") ;;
+          esac
           cd apps/desktop/dist
           SHA=$(shasum -a 256 codync-macos.dmg | awk '{print $1}')
           echo "$SHA  codync-macos.dmg" > codync-macos.dmg.sha256
-          sed -e "s/0.0.0/$CLEAN_VERSION/g" \
-              -e "s/REPLACE_WITH_SHA256/$SHA/g" \
+          sed -e "s|0\.0\.0|$CLEAN_VERSION|g" \
+              -e "s|REPLACE_WITH_SHA256|$SHA|g" \
               -e "s|leepokai/Codync|${{ github.repository }}|g" \
               ../../../packaging/homebrew/codync.rb > codync.rb
 
