@@ -32,6 +32,7 @@
 //! (`input-fast` unordered for moves, `input` reliable): `move`, `click`, `drag`, `scroll`,
 //! `text`, `key` in display points, plus `down`/`up` for touch drags and `clipboard {text}`.
 
+mod agent_desktop;
 mod computer;
 mod cua;
 mod helper;

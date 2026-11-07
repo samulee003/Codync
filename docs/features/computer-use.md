@@ -21,6 +21,12 @@ The desktop setup uses a compact device header and one outlined permission group
 
 Desktop setup polls read-only status while open and checks again on focus. Opening Settings never counts as a grant. Failures retain retry and Settings actions; completion requires actual platform-specific status. Skipping grants no permissions. Older clients ignore the additive `permissionApp` status field.
 
+## Alternative driver: agent-desktop
+
+Set `CODYNC_COMPUTER_DRIVER=agent-desktop` in the host's environment to run the `computer` tools on [agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0) instead of cua-driver. It reads an app's accessibility tree (macOS AX, Windows UI Automation, Linux AT-SPI) and acts on refs from that snapshot, headless by default. The host finds the `agent-desktop` CLI beside itself or on `PATH` (`npm install -g agent-desktop`); without it the default driver stays in use. `host/src/screen/agent_desktop.rs` runs the CLI once per call, with a `--session` per bot so refs never cross bots.
+
+Tools: `desktop_list_apps`, `desktop_list_windows`, `desktop_snapshot`, `desktop_click`, `desktop_type`, `desktop_press`, `desktop_scroll`, `desktop_launch`. Typed text goes through the CLI's stdin, never its arguments; arguments that look like flags are refused. The rules above (one bot at a time, look-only while a phone has taken over) apply unchanged, since they run before the backend. `type_login` isn't offered with this driver. The macOS permission setup is the same: grant Accessibility and Screen Recording to the process that runs the host.
+
 ## The driver
 
 The tools come from [cua-driver](https://github.com/trycua/cua) (MIT), which works on apps in the background: by accessibility element where it can (`element_token` from `get_window_state`), by pixels posted to the app otherwise, and in the foreground only when a call asks for `delivery_mode: "foreground"`. The user's cursor and front app stay theirs.

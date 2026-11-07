@@ -4,7 +4,7 @@
 
 #[cfg(target_os = "linux")]
 use super::helper_tools;
-use super::{AGENT_HOLD, Screen, cua};
+use super::{AGENT_HOLD, Screen, agent_desktop, cua};
 use crate::LockExt;
 use crate::hub::Hub;
 use anyhow::{Result, anyhow, bail};
@@ -18,18 +18,30 @@ const TYPE_LOGIN: &str = "type_login";
 #[derive(Clone, Copy)]
 enum Backend {
     Driver,
+    /// agent-desktop, when the user chose it (`CODYNC_COMPUTER_DRIVER`) and it is installed.
+    AgentDesktop,
     #[cfg(target_os = "linux")]
     Helper,
 }
 
 #[cfg(not(target_os = "linux"))]
 fn backend() -> Backend {
-    Backend::Driver
+    if agent_desktop::selected() && agent_desktop::executable().is_some() {
+        Backend::AgentDesktop
+    } else {
+        Backend::Driver
+    }
 }
 
 #[cfg(target_os = "linux")]
 fn backend() -> Backend {
-    if cua::linux_session() && cua::executable().is_some() { Backend::Driver } else { Backend::Helper }
+    if agent_desktop::selected() && agent_desktop::executable().is_some() {
+        Backend::AgentDesktop
+    } else if cua::linux_session() && cua::executable().is_some() {
+        Backend::Driver
+    } else {
+        Backend::Helper
+    }
 }
 
 impl Screen {
@@ -63,10 +75,11 @@ pub async fn computer_tools(hub: &Arc<Hub>) -> Value {
     let screen = &hub.screen;
     let mut tools = match backend() {
         Backend::Driver => cua::tools(screen).await,
+        Backend::AgentDesktop => agent_desktop::tools(),
         #[cfg(target_os = "linux")]
         Backend::Helper => helper_tools::tools(),
     };
-    if cfg!(not(windows)) {
+    if cfg!(not(windows)) && !matches!(backend(), Backend::AgentDesktop) {
         tools.push(type_login_tool());
     }
     json!({"tools": tools})
@@ -84,6 +97,8 @@ pub async fn computer(hub: &Arc<Hub>, bot: &str, name: &str, args: Value) -> Res
     }
     let backend = backend();
     let read_only = match backend {
+        Backend::AgentDesktop if !agent_desktop::offered(name) => bail!("unknown computer tool `{name}`"),
+        Backend::AgentDesktop => agent_desktop::read_only(name),
         _ if name == TYPE_LOGIN => false,
         Backend::Driver if !cua::offered(name) => bail!("unknown computer tool `{name}`"),
         Backend::Driver => cua::read_only(name),
@@ -109,6 +124,7 @@ pub async fn computer(hub: &Arc<Hub>, bot: &str, name: &str, args: Value) -> Res
     }
     match backend {
         Backend::Driver => cua::call(screen, bot, name, args).await,
+        Backend::AgentDesktop => agent_desktop::call(bot, name, args).await,
         #[cfg(target_os = "linux")]
         Backend::Helper => helper_tools::run(screen, name, args).await,
     }
@@ -176,6 +192,9 @@ async fn type_login(hub: &Arc<Hub>, bot: &str, backend: Backend, args: Value) ->
         }
     };
     match backend {
+        Backend::AgentDesktop => {
+            bail!("type_login isn't available with agent-desktop. Ask the user to sign in themselves.")
+        }
         Backend::Driver => {
             // macOS: into the checked app, in the background; Linux: the active window it checked.
             let args = if cfg!(target_os = "macos") {
