@@ -6,5 +6,7 @@
 	<string>pk_live_Y2xlcmsuY29keW5jLmRldiQ</string>
 	<key>cloudURL</key>
 	<string>https://api.codync.dev</string>
+	<key>pushRelayURL</key>
+	<string>https://codync-relay.kevin2005ha.workers.dev</string>
 </dict>
 </plist>

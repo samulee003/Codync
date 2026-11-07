@@ -8,8 +8,16 @@ private let log = Logger(subsystem: "com.pokai.Codync", category: "Account")
 /// one namespace per account context so a signed-out account's data never shows in another.
 public enum SharedStore {
     public static let appGroup = AppEnvironment.current.appGroup
-    /// The APNs push relay (relay/ in this repo).
-    public static let relayURL = "https://codync-relay.kevin2005ha.workers.dev"
+    /// The APNs push relay (`AccountConfig.plist` `pushRelayURL`, `relay/` in this repo).
+    public static let relayURL: String = {
+        if let url = Bundle.main.url(forResource: "AccountConfig", withExtension: "plist"),
+           let dict = NSDictionary(contentsOf: url),
+           let raw = (dict["pushRelayURL"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty {
+            return raw
+        }
+        return "https://codync-relay.kevin2005ha.workers.dev"
+    }()
 
     private static var defaults: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
 

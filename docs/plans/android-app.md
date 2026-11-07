@@ -120,7 +120,7 @@ the Dynamic Island) with its feature graphic, per language.
 - [ ] Host release gating for Android: like iPhones and the App Store, a release that raises
   `minApp` must wait while paired Android phones can't get that version from Play
   ([compatibility](../reference/compatibility.md)).
-- [ ] Move the default push relay URL into `apps/shared/Config/{dev,main}.plist` (iOS reads
+- [x] Move the default push relay URL into `apps/shared/Config/{dev,main}.plist` (iOS reads
   them as `AccountConfig.plist`), so the Android build stops parsing the iOS kit's
   `SharedStore.swift` and iPhone-only edits there stop counting as Android changes.
 - [x] *Rate on Google Play* and *Report an issue* in the Settings tab, since 2026-10-31.

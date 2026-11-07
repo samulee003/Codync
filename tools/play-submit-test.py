@@ -33,6 +33,7 @@ assert play.store.changed("v2.23.0", "v2.23.1", play.ANDROID_PATHS)
 # The bundle's sources count; tests, the release acceptance build, the README and the Play notes don't.
 files = play.store.git("ls-files", "--", *play.ANDROID_PATHS).splitlines()
 assert {"apps/android/app/build.gradle.kts", "apps/android/design/build.gradle.kts", "apps/shared/Config/main.plist"} <= set(files)
+assert "apps/ios/Kit/Sources/CodyncKit/Client/SharedStore.swift" not in files
 assert not [f for f in files if re.search(r"/src/(test|androidTest|releaseAcceptance)/|README\.md$|WhatsNew\.md$", f)]
 print("ok")
 

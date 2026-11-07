@@ -25,8 +25,6 @@ fun accountValue(variant: String, key: String): String {
         "Missing $key in the shared $variant account configuration."
     }
 }
-val upstreamRelay = rootProject.file("../ios/Kit/Sources/CodyncKit/Client/SharedStore.swift").readLines()
-    .first { it.contains("static let relayURL =") }.substringAfter('"').substringBefore('"')
 val firebaseConfig = deploymentValue("codyncGoogleServicesFile")?.takeIf(String::isNotBlank)?.let(::file)
 check(firebaseConfig == null || firebaseConfig.isFile) { "The configured Firebase file does not exist." }
 if (firebaseConfig != null) apply(plugin = "com.google.gms.google-services")
@@ -99,7 +97,6 @@ android {
         versionCode = productVersionCode
         versionName = productVersion
         testInstrumentationRunner = if (releaseTests) "com.codync.android.VoiceReleaseRunner" else "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "PUSH_RELAY_URL", javaString(deploymentValue("codyncPushRelayUrl") ?: upstreamRelay))
         buildConfigField("boolean", "PUSH_CONFIGURED", (firebaseConfig != null).toString())
     }
     if (uploadKeystore != null) signingConfigs.create("upload") {
@@ -117,6 +114,7 @@ android {
             buildConfigField("String", "URL_SCHEME", "\"codync-dev\"")
             buildConfigField("String", "CLOUD_URL", javaString(deploymentValue("codyncCloudUrl") ?: accountValue("dev", "cloudURL")))
             buildConfigField("String", "CLERK_PUBLISHABLE_KEY", javaString(deploymentValue("codyncClerkPublishableKey") ?: accountValue("dev", "clerkPublishableKey")))
+            buildConfigField("String", "PUSH_RELAY_URL", javaString(deploymentValue("codyncPushRelayUrl") ?: accountValue("dev", "pushRelayURL")))
         }
         release {
             resValue("string", "app_name", deploymentValue("codyncAppName") ?: "Codync")
@@ -124,6 +122,7 @@ android {
             buildConfigField("String", "URL_SCHEME", "\"codync\"")
             buildConfigField("String", "CLOUD_URL", javaString(deploymentValue("codyncCloudUrl") ?: accountValue("main", "cloudURL")))
             buildConfigField("String", "CLERK_PUBLISHABLE_KEY", javaString(deploymentValue("codyncClerkPublishableKey") ?: accountValue("main", "clerkPublishableKey")))
+            buildConfigField("String", "PUSH_RELAY_URL", javaString(deploymentValue("codyncPushRelayUrl") ?: accountValue("main", "pushRelayURL")))
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("upload")

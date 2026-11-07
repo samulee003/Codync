@@ -33,9 +33,8 @@ with the release notes in `WhatsNew.md` here.
 ## Account and push configuration
 
 A clean checkout builds `com.pokai.Codync.android.dev` (Codync Dev) or
-`com.pokai.Codync.android` (Codync). Debug/release read their account configuration from
-`apps/shared/Config/dev.plist` and `main.plist`. The default push relay comes from
-`CodyncKit/Client/SharedStore.swift`.
+`com.pokai.Codync.android` (Codync). Debug/release read their account and push relay configuration from
+`apps/shared/Config/dev.plist` and `main.plist`.
 
 Firebase client configuration is deployment-specific and excluded from Git (the
 official one comes from the `codync-auth` Firebase project: a CI secret, and
