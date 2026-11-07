@@ -7,6 +7,12 @@ released version's section; a version without one gets the PRs' "What's New: And
 else a generic "Bug fixes and improvements" line. Delete old sections.
 -->
 
+## 2.41.0
+### zh-Hant
+- 電腦上有多個 bot 同時操作時，每一個都會顯示正在使用電腦的標記。
+### en-US
+- Every bot that is using the computer at the same time now shows the in-use marker, not just one.
+
 ## 2.40.2
 ### zh-Hant
 - bot 現在可以讓 dev server 持續在電腦上執行，不會因為 bot 閒置或重新啟動而中斷。port 會顯示在聊天標題下方；點 bot 的名稱，就能看記錄、重新啟動或停止；手機連得到電腦時，也能直接開啟。

@@ -4,7 +4,7 @@
 
 #[cfg(target_os = "linux")]
 use super::helper_tools;
-use super::{AGENT_HOLD, Screen, cua};
+use super::{AGENT_HOLD, Screen, agent_desktop, cua};
 use crate::LockExt;
 use crate::hub::Hub;
 use anyhow::{Result, anyhow, bail};
@@ -18,18 +18,30 @@ const TYPE_LOGIN: &str = "type_login";
 #[derive(Clone, Copy)]
 enum Backend {
     Driver,
+    /// agent-desktop, when the user chose it (`CODYNC_COMPUTER_DRIVER`) and it is installed.
+    AgentDesktop,
     #[cfg(target_os = "linux")]
     Helper,
 }
 
 #[cfg(not(target_os = "linux"))]
 fn backend() -> Backend {
-    Backend::Driver
+    if agent_desktop::selected() && agent_desktop::executable().is_some() {
+        Backend::AgentDesktop
+    } else {
+        Backend::Driver
+    }
 }
 
 #[cfg(target_os = "linux")]
 fn backend() -> Backend {
-    if cua::linux_session() && cua::executable().is_some() { Backend::Driver } else { Backend::Helper }
+    if agent_desktop::selected() && agent_desktop::executable().is_some() {
+        Backend::AgentDesktop
+    } else if cua::linux_session() && cua::executable().is_some() {
+        Backend::Driver
+    } else {
+        Backend::Helper
+    }
 }
 
 impl Screen {
@@ -39,21 +51,25 @@ impl Screen {
         cfg!(windows) || self.enabled()
     }
 
-    /// Marks `bot` as the one using the computer. Returns whether that's news.
-    fn claim(&self, bot: &str, read_only: bool) -> Result<bool> {
+    /// Marks `bot` as using the computer. Returns whether that's news. With `shared` (a backend
+    /// that acts in the background, so bots don't fight over the pointer and focus) any number of
+    /// bots may work at once; otherwise one bot at a time. A phone takeover blocks both.
+    fn claim(&self, bot: &str, read_only: bool, shared: bool) -> Result<bool> {
         let mut c = self.control.locked();
         if c.user && !read_only {
             bail!(
                 "The user has taken over the screen from their phone. Wait until they hand it back, or ask them what to do."
             );
         }
-        if let Some(other) = c.active_agent()
+        if !shared
+            && let Some(other) = c.active_agent()
             && other != bot
         {
             bail!("Another bot is using the computer right now. Try again in a minute.");
         }
-        let fresh = c.active_agent().is_none();
-        c.agent = Some((bot.to_owned(), Instant::now()));
+        let fresh = !c.is_active(bot);
+        c.agents.retain(|_, t| t.elapsed() < AGENT_HOLD);
+        c.agents.insert(bot.to_owned(), Instant::now());
         Ok(fresh)
     }
 }
@@ -63,10 +79,11 @@ pub async fn computer_tools(hub: &Arc<Hub>) -> Value {
     let screen = &hub.screen;
     let mut tools = match backend() {
         Backend::Driver => cua::tools(screen).await,
+        Backend::AgentDesktop => agent_desktop::tools(),
         #[cfg(target_os = "linux")]
         Backend::Helper => helper_tools::tools(),
     };
-    if cfg!(not(windows)) {
+    if cfg!(not(windows)) && !matches!(backend(), Backend::AgentDesktop) {
         tools.push(type_login_tool());
     }
     json!({"tools": tools})
@@ -84,20 +101,23 @@ pub async fn computer(hub: &Arc<Hub>, bot: &str, name: &str, args: Value) -> Res
     }
     let backend = backend();
     let read_only = match backend {
+        Backend::AgentDesktop if !agent_desktop::offered(name) => bail!("unknown computer tool `{name}`"),
+        Backend::AgentDesktop => agent_desktop::read_only(name),
         _ if name == TYPE_LOGIN => false,
         Backend::Driver if !cua::offered(name) => bail!("unknown computer tool `{name}`"),
         Backend::Driver => cua::read_only(name),
         #[cfg(target_os = "linux")]
         Backend::Helper => helper_tools::read_only(name),
     };
-    if screen.claim(bot, read_only)? {
+    if screen.claim(bot, read_only, matches!(backend, Backend::AgentDesktop))? {
         screen.emit();
         let screen = screen.clone();
+        let bot = bot.to_owned();
         tokio::spawn(async move {
-            // Say when the bot stops, so phones drop the live chip.
+            // Say when this bot stops, so phones drop its live chip even while others keep working.
             loop {
                 tokio::time::sleep(AGENT_HOLD).await;
-                if screen.control.locked().active_agent().is_none() {
+                if !screen.control.locked().is_active(&bot) {
                     screen.emit();
                     return;
                 }
@@ -109,6 +129,7 @@ pub async fn computer(hub: &Arc<Hub>, bot: &str, name: &str, args: Value) -> Res
     }
     match backend {
         Backend::Driver => cua::call(screen, bot, name, args).await,
+        Backend::AgentDesktop => agent_desktop::call(bot, name, args).await,
         #[cfg(target_os = "linux")]
         Backend::Helper => helper_tools::run(screen, name, args).await,
     }
@@ -176,6 +197,9 @@ async fn type_login(hub: &Arc<Hub>, bot: &str, backend: Backend, args: Value) ->
         }
     };
     match backend {
+        Backend::AgentDesktop => {
+            bail!("type_login isn't available with agent-desktop. Ask the user to sign in themselves.")
+        }
         Backend::Driver => {
             // macOS: into the checked app, in the background; Linux: the active window it checked.
             let args = if cfg!(target_os = "macos") {
@@ -206,12 +230,25 @@ mod tests {
     fn user_takeover_blocks_bot_actions_but_not_looking() {
         let (tx, _) = broadcast::channel(8);
         let s = Screen::new(Some(true), tx);
-        assert!(s.claim("a", false).unwrap());
-        assert!(!s.claim("a", false).unwrap());
-        assert!(s.claim("b", true).is_err(), "one bot at a time");
+        assert!(s.claim("a", false, false).unwrap());
+        assert!(!s.claim("a", false, false).unwrap());
+        assert!(s.claim("b", true, false).is_err(), "one bot at a time");
         s.takeover(true);
-        assert!(s.claim("a", false).is_err());
-        assert!(s.claim("a", true).is_ok());
+        assert!(s.claim("a", false, false).is_err());
+        assert!(s.claim("a", true, false).is_ok());
+    }
+
+    #[test]
+    fn background_drivers_let_bots_work_at_once() {
+        let (tx, _) = broadcast::channel(8);
+        let s = Screen::new(Some(true), tx);
+        assert!(s.claim("a", false, true).unwrap());
+        assert!(s.claim("b", false, true).unwrap(), "a second bot is news too");
+        assert_eq!(s.control.locked().active_agents(), ["a", "b"]);
+        assert!(!s.claim("a", false, true).unwrap());
+        s.takeover(true);
+        assert!(s.claim("a", false, true).is_err(), "a phone takeover still stops every bot");
+        assert!(s.claim("b", true, true).is_ok(), "but they may look");
     }
 
     #[test]

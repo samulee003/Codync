@@ -32,6 +32,7 @@
 //! (`input-fast` unordered for moves, `input` reliable): `move`, `click`, `drag`, `scroll`,
 //! `text`, `key` in display points, plus `down`/`up` for touch drags and `clipboard {text}`.
 
+mod agent_desktop;
 mod computer;
 mod cua;
 mod helper;
@@ -72,13 +73,26 @@ const KV_ENABLED: &str = "screen_enabled";
 struct Control {
     /// The phone took over: bots may only look.
     user: bool,
-    /// The bot using the computer, and when it last did.
-    agent: Option<(String, Instant)>,
+    /// The bots using the computer, and when each last did.
+    agents: HashMap<String, Instant>,
 }
 
 impl Control {
+    /// The bot that used the computer most recently, while it still counts as using it.
     fn active_agent(&self) -> Option<&str> {
-        self.agent.as_ref().filter(|(_, t)| t.elapsed() < AGENT_HOLD).map(|(b, _)| b.as_str())
+        self.agents.iter().filter(|(_, t)| t.elapsed() < AGENT_HOLD).max_by_key(|(_, t)| **t).map(|(b, _)| b.as_str())
+    }
+
+    /// Every bot still counting as using the computer, in a stable order.
+    fn active_agents(&self) -> Vec<&str> {
+        let mut bots: Vec<&str> =
+            self.agents.iter().filter(|(_, t)| t.elapsed() < AGENT_HOLD).map(|(b, _)| b.as_str()).collect();
+        bots.sort_unstable();
+        bots
+    }
+
+    fn is_active(&self, bot: &str) -> bool {
+        self.agents.get(bot).is_some_and(|t| t.elapsed() < AGENT_HOLD)
     }
 }
 
@@ -179,6 +193,7 @@ impl Screen {
             "displays": st.displays,
             "userControl": c.user,
             "agentBot": c.active_agent(),
+            "agentBots": c.active_agents(),
             "computerUse": self.computer_use(),
             "viewers": viewers,
         })

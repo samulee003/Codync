@@ -2,7 +2,7 @@
 
 Bots with **Use the computer** on get the built-in `computer` MCP server (`codync-host mcp computer`, `host/src/mcp.rs`). Every agent sees the same server; the host lists its tools and runs every call (`computerTools`, `computerCall`, loopback only), so Codync's rules apply whatever the harness:
 
-- One bot at a time. While a phone has taken over Remote screen, bots may only use tools that look.
+- One bot at a time (with agent-desktop, [any number](#alternative-driver-agent-desktop)). While a phone has taken over Remote screen, bots may only use tools that look.
 - `type_login` types a saved login only into its own site or app, and a password only into a password field. The agent never sees the value.
 - The harness's own approval rules still apply to each call.
 
@@ -20,6 +20,12 @@ The desktop setup uses a compact device header and one outlined permission group
 - Terminal UI: the bot editor shows current helper/permission status and points to **Computer access**. System Settings, background-service registration and portal choosers require the graphical desktop, so the terminal does not issue those prompts. Status follows host events.
 
 Desktop setup polls read-only status while open and checks again on focus. Opening Settings never counts as a grant. Failures retain retry and Settings actions; completion requires actual platform-specific status. Skipping grants no permissions. Older clients ignore the additive `permissionApp` status field.
+
+## Alternative driver: agent-desktop
+
+Set `CODYNC_COMPUTER_DRIVER=agent-desktop` in the host's environment to run the `computer` tools on [agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0) instead of cua-driver. It reads an app's accessibility tree (macOS AX, Windows UI Automation, Linux AT-SPI) and acts on refs from that snapshot, headless by default. The host finds the `agent-desktop` CLI beside itself or on `PATH` (`npm install -g agent-desktop`); without it the default driver stays in use. `host/src/screen/agent_desktop.rs` runs the CLI once per call, with a `--session` per bot so refs never cross bots.
+
+Tools: `desktop_list_apps`, `desktop_list_windows`, `desktop_snapshot`, `desktop_click`, `desktop_type`, `desktop_press`, `desktop_scroll`, `desktop_launch`. Typed text goes through the CLI's stdin, never its arguments; arguments that look like flags are refused. Bots work at once with this driver: it acts in the background, so there is no one-bot-at-a-time lock and no per-app lock either (two bots on the same app can step on each other, so give them different apps). The phone takeover rule still applies: while a phone has taken over, every bot may only look. The `screen` state lists every bot using the computer in `agentBots` (additive; `agentBot` stays as the most recent one for older clients, and a client reading only `agentBot` treats it as a one-element list). Every client marks each listed bot as using the computer; the tray says "N bots are using it" when there are several. `type_login` isn't offered with this driver. The macOS permission setup is the same: grant Accessibility and Screen Recording to the process that runs the host.
 
 ## The driver
 

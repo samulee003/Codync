@@ -33,7 +33,7 @@ public struct BotRow: View {
                         .font(.body.weight(.semibold))
                         .foregroundStyle(Palette.text)
                         .lineLimit(1)
-                    if model.screen?.agentBot == bot.id {
+                    if model.screen?.isOperating(bot.id) == true {
                         Image(systemName: "cursorarrow.motionlines")
                             .font(.caption)
                             .foregroundStyle(Palette.accent)

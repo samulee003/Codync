@@ -427,7 +427,7 @@ extension ThreadView {
 
     /// Opens the computer's screen; pulses while this bot is operating it (watch, then take over).
     private var computerButton: some View {
-        let operating = model.screen?.agentBot == botId
+        let operating = model.screen?.isOperating(botId) == true
         return Button(L10n.tr("Computer"), systemImage: "desktopcomputer") {
             model.screenRequest = operating ? ScreenRequest(watching: botId) : ScreenRequest()
         }

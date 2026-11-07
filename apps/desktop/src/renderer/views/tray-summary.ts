@@ -219,8 +219,9 @@ function screenSubtitle(app: AppModel) {
   if (!screen.connected) return 'Starting Codync Screen…'
   if (!screen.capture || !screen.input) return 'Needs permission'
   if (screen.viewers > 0) return screen.viewers === 1 ? 'Your phone is viewing' : `${screen.viewers} viewers`
-  const bot = screen.agentBot ? local.bots.get(screen.agentBot) : null
-  if (bot) return `${bot.name} is using it`
+  const names = (screen.agentBots ?? []).flatMap((id) => local.bots.get(id)?.name ?? [])
+  if (names.length === 1) return `${names[0]} is using it`
+  if (names.length > 1) return `${names.length} bots are using it`
   const display = screen.displays.find((d) => d.main)?.name ?? screen.displays[0]?.name
   return display ? `Ready · ${display}` : 'Ready'
 }

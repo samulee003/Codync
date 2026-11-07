@@ -347,7 +347,7 @@ private fun Bot.movesWith(other: Bot) = band == other.band && (pinned || section
                     if (bot.pinned) Symbol("pin.fill", size = 13.dp, tint = Palette.tertiary)
                     Text(bot.name, Modifier.weight(1f, fill = false), style = Type.body.semibold, color = Palette.text, maxLines = 1,
                         overflow = TextOverflow.Ellipsis)
-                    if (state.screen?.agentBot == bot.id) Symbol("cursorarrow.motionlines", size = 14.dp, tint = Palette.accent,
+                    if (state.screen?.isOperating(bot.id) == true) Symbol("cursorarrow.motionlines", size = 14.dp, tint = Palette.accent,
                         contentDescription = tr("Using the computer"))
                 }
                 Spacer(Modifier.width(8.dp))

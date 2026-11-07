@@ -30,10 +30,13 @@ data class ScreenState(
     val userControl: Boolean = false,
     /** The bot using the computer right now. */
     val agentBot: String? = null,
+    /** Every bot using the computer right now (several can at once); older hosts send only `agentBot`. */
+    val agentBots: List<String> = emptyList(),
     /** Bots with computer use can act here (Windows: always; elsewhere Remote screen is on). */
     val computerUse: Boolean = false,
     val viewers: Int = 0,
 ) {
+    fun isOperating(botId: String): Boolean = botId in agentBots || botId == agentBot
     val available: Boolean get() = enabled && connected && capture
     val controlReady: Boolean get() = if (platform == "windows") computerUse else available && input
     val mainDisplay: ScreenDisplay? get() = displays.firstOrNull { it.main } ?: displays.firstOrNull()
