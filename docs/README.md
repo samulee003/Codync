@@ -34,6 +34,7 @@ Source review, a passing build, local integration tests and production acceptanc
 - [Chat messages](features/chat-messages.md)
 - [Group chats and replies](features/groups-and-replies.md)
 - [Bot-to-bot collaboration](features/bot-collaboration.md)
+- [Team board: shared tasks and per-task git worktrees](features/team-board.md)
 - [codync-network](features/codync-network.md) (your computers' network: bots message bots on the user's other computers)
 - [Cloud assistants](features/cloud-assistants.md) (ChatGPT, Claude and others message the bots through the Codync connector)
 - [codync-network and cloud assistants: design](design/codync-network.md) (why iroh, connectors and relays, trust, addresses, quiet letters, the connector's choices, next steps)

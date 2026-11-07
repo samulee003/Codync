@@ -104,6 +104,7 @@ host answers and sends it once the host is up.
 | `skill_installed` | host | `installSkill` | `custom` |
 | `skill_removed` | host | `removeSkill` | — |
 | `skill_written` | host | A bot's `save_skill` (`chatCall`) | `change` (`new`/`update`) |
+| `task_changed` | host | A team board change: an app's `createTask`, `editTask`, `noteTask`, `assignTask`, `setTaskStatus`, `mergeTask`, `deleteTask`, or a bot's `create_task`, `claim_task`, `note_task`, `finish_task`, `release_task` (`teamCall`) | `action` (`create`/`edit`/`note`/`assign`/`open`/`done`/`cancelled`/`merge`/`delete`/`claim`/`finish`/`release`), `by` (`user`/`bot`), never a task's text or folder |
 | `artifact_published` | host | A bot's `publish_artifact` (`chatCall`) | `change` (`new`/`update`), `card` (whether its card went into the bot's chat), never its title |
 | `credential_saved` | host | A key, login or vault is saved (clearing one isn't) | `kind` (`login`/`onepassword`/`connector`/`composio`/`voice`/`agent_env`) |
 | `agent_setup_started` | host | `agentSetup` (an agent's install or sign-in terminal) | `agent` |
@@ -141,6 +142,7 @@ host answers and sends it once the host is up.
 | `library` | a chat's Library (iPhone: the details tab; Android: its sheet) | library tab | library overlay |
 | `artifact` | an artifact's viewer | an artifact's viewer | — (opens in the browser) |
 | `network` | network sheet (Network on a computer's card in Manage computers) | — (part of `computers`) | network sheet |
+| `board` | team board sheet | team board sheet | board overlay |
 
 ## Funnels
 
