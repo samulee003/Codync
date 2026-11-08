@@ -235,7 +235,12 @@ jobs:
           test "$(node -p process.arch)" = '${{ matrix.arch }}'
           npm ci
           node --test --experimental-strip-types src/shared/ssh-platform.test.ts
-          npm run dist:win:main -- --${{ matrix.arch }} --publish never
+          # GitHub's release downloads (Electron, packaging tools) answer 504 now and then: retry, keeping what was fetched.
+          for attempt in 1 2 3 4; do
+            npm run dist:win:main -- --${{ matrix.arch }} --publish never && break
+            [ "$attempt" = 4 ] && exit 1
+            echo "Packaging failed; trying again"; sleep $((attempt * 60))
+          done
           cd dist
           sha256sum codync-windows-${{ matrix.arch }}.exe > codync-windows-${{ matrix.arch }}.exe.sha256
       - name: Install
@@ -332,7 +337,12 @@ jobs:
         working-directory: apps/desktop
         run: |
           npm ci
-          npm run dist:linux:main -- --${{ matrix.arch }} --publish never
+          # GitHub's release downloads (Electron, packaging tools) answer 504 now and then: retry, keeping what was fetched.
+          for attempt in 1 2 3 4; do
+            npm run dist:linux:main -- --${{ matrix.arch }} --publish never && break
+            [ "$attempt" = 4 ] && exit 1
+            echo "Packaging failed; trying again"; sleep $((attempt * 60))
+          done
           # The website links releases/latest/download/codync-<os>-<arch>.tar.gz.
           cd dist
           # electron-builder names x64 tar.gz `x64` and deb `amd64`; the update feed follows the renames.
