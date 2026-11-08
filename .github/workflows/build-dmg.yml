@@ -64,9 +64,9 @@ jobs:
       # build itself finds it cached: the Screen helper's Swift packages (WebRTC) and the computer-use driver.
       - name: Prefetch downloads (retrying)
         run: |
-          for attempt in 1 2 3 4; do
+          for attempt in 1 2 3 4 5 6 7 8; do
             xcodebuild -resolvePackageDependencies -project apps/Codync.xcodeproj -scheme Screen -derivedDataPath build/dd && break
-            [ "$attempt" = 4 ] && exit 1
+            [ "$attempt" = 8 ] && exit 1
             echo "Swift packages didn't resolve; trying again"; sleep $((attempt * 30))
           done
           node packaging/cua-driver/fetch.mjs darwin "$RUNNER_TEMP/cua-driver"
