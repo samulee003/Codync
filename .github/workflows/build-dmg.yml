@@ -79,7 +79,17 @@ jobs:
           # Universal DMG signed ad hoc (identity "-"): no Apple certificate, but a valid signature, which macOS needs to
           # register Codync Screen's launch agent. Ad hoc needs hardened runtime off (Electron's frameworks carry another
           # team ID). No notarization, no auto-publish.
-          npm run dist:mac:main -- -c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false --publish never
+          # The steps of `npm run dist:mac:main`, with electron-builder retried: its downloads from GitHub releases
+          # (Electron, its checksums, packaging tools) answer 504 now and then, and what one try fetched stays cached.
+          node tools/account-config.mjs main
+          node tools/native-host.mjs main
+          node tools/native-screen.mjs main
+          npx electron-vite build
+          for attempt in 1 2 3 4 5; do
+            npx electron-builder --mac -c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false --publish never && break
+            [ "$attempt" = 5 ] && exit 1
+            echo "electron-builder failed; trying again"; rm -rf dist; sleep $((attempt * 60))
+          done
 
       - name: Generate Homebrew Cask formula
         run: |
