@@ -14,6 +14,9 @@ on:
   push:
     tags:
       - 'v*'
+    # Temporary: builds this branch's DMG as an artifact (the session can't dispatch workflows). Removed after the build.
+    branches:
+      - 'claude/determined-gauss-xiszp0'
 
 permissions:
   contents: write
@@ -62,13 +65,13 @@ jobs:
 
       - name: Build and Package DMG
         working-directory: apps/desktop
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
           npm ci
           npm run icons
-          # Build universal DMG with ad-hoc signature, disabling notarization and auto-publish
-          npm run dist:mac:main -- -c.mac.notarize=false --publish never
+          # Universal DMG signed ad hoc (identity "-"): no Apple certificate, but a valid signature, which macOS needs to
+          # register Codync Screen's launch agent. Ad hoc needs hardened runtime off (Electron's frameworks carry another
+          # team ID). No notarization, no auto-publish.
+          npm run dist:mac:main -- -c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false --publish never
 
       - name: Generate Homebrew Cask formula
         run: |
