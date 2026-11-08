@@ -86,7 +86,7 @@ jobs:
           node tools/native-screen.mjs main
           npx electron-vite build
           for attempt in 1 2 3 4 5; do
-            npx electron-builder --mac -c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false --publish never && break
+            npx electron-builder --mac --config tools/main-builder.cjs -c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false --publish never && break
             [ "$attempt" = 5 ] && exit 1
             echo "electron-builder failed; trying again"; rm -rf dist; sleep $((attempt * 60))
           done
