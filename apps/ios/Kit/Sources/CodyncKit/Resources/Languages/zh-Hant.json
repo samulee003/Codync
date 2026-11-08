@@ -1866,5 +1866,8 @@
   "Mark done": "標記為完成",
   "Cancel task": "取消任務",
   "Delete task": "刪除任務",
-  "Connect to this computer to use its board": "連線到這台電腦才能使用它的任務板"
+  "Connect to this computer to use its board": "連線到這台電腦才能使用它的任務板",
+  "Several bots at once": "多個 bot 同時操作",
+  "Bots use apps in the background with agent-desktop, so more than one can work at the same time.": "bot 透過 agent-desktop 在背景操作 App，可以同時有多個 bot 一起工作。",
+  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "尚未安裝 agent-desktop，所以 bot 仍會輪流操作。安裝指令：npm install -g agent-desktop"
 }

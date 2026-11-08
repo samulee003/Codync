@@ -67,6 +67,7 @@ impl App {
                 let title = super::super::l10n::cycle_language();
                 self.flash(title.as_ref());
             }
+            Action::ComputerDriver => self.toggle_computer_driver(),
             Action::ThinkingDetails => self.flash(if super::super::details::toggle() {
                 "Thinking details on: > unfolds a working bot's steps"
             } else {

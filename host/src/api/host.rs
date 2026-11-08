@@ -226,6 +226,10 @@ pub(super) async fn call(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value
             hub.screen.set_enabled(&hub.store, b["enabled"].as_bool().unwrap_or(false)).await?;
             hub.screen.state()
         }
+        "setComputerDriver" => {
+            hub.screen.set_driver(&hub.store, crate::screen::ComputerDriver::parse(str_arg(&b, "driver")?)?)?;
+            hub.screen.state()
+        }
         "computerTools" => crate::screen::computer_tools(hub).await,
         "computerCall" => {
             let args = b.get("arguments").filter(|a| a.is_object()).cloned().unwrap_or_else(|| json!({}));

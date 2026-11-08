@@ -18,29 +18,37 @@ const TYPE_LOGIN: &str = "type_login";
 #[derive(Clone, Copy)]
 enum Backend {
     Driver,
-    /// agent-desktop, when the user chose it (`CODYNC_COMPUTER_DRIVER`) and it is installed.
+    /// agent-desktop, when the user chose it (Settings → Computer access, or `CODYNC_COMPUTER_DRIVER`) and it is
+    /// installed.
     AgentDesktop,
     #[cfg(target_os = "linux")]
     Helper,
 }
 
-#[cfg(not(target_os = "linux"))]
-fn backend() -> Backend {
-    if agent_desktop::selected() && agent_desktop::executable().is_some() {
-        Backend::AgentDesktop
-    } else {
-        Backend::Driver
+impl Screen {
+    #[cfg(not(target_os = "linux"))]
+    fn backend(&self) -> Backend {
+        if self.agent_desktop_selected() && agent_desktop::executable().is_some() {
+            Backend::AgentDesktop
+        } else {
+            Backend::Driver
+        }
     }
-}
 
-#[cfg(target_os = "linux")]
-fn backend() -> Backend {
-    if agent_desktop::selected() && agent_desktop::executable().is_some() {
-        Backend::AgentDesktop
-    } else if cua::linux_session() && cua::executable().is_some() {
-        Backend::Driver
-    } else {
-        Backend::Helper
+    #[cfg(target_os = "linux")]
+    fn backend(&self) -> Backend {
+        if self.agent_desktop_selected() && agent_desktop::executable().is_some() {
+            Backend::AgentDesktop
+        } else if cua::linux_session() && cua::executable().is_some() {
+            Backend::Driver
+        } else {
+            Backend::Helper
+        }
+    }
+
+    /// Whether the user chose agent-desktop: in Settings, or through the host's environment.
+    fn agent_desktop_selected(&self) -> bool {
+        self.driver() == super::ComputerDriver::AgentDesktop || agent_desktop::forced()
     }
 }
 
@@ -77,13 +85,13 @@ impl Screen {
 /// The `computer` MCP tools on this computer.
 pub async fn computer_tools(hub: &Arc<Hub>) -> Value {
     let screen = &hub.screen;
-    let mut tools = match backend() {
+    let mut tools = match screen.backend() {
         Backend::Driver => cua::tools(screen).await,
         Backend::AgentDesktop => agent_desktop::tools(),
         #[cfg(target_os = "linux")]
         Backend::Helper => helper_tools::tools(),
     };
-    if cfg!(not(windows)) && !matches!(backend(), Backend::AgentDesktop) {
+    if cfg!(not(windows)) && !matches!(screen.backend(), Backend::AgentDesktop) {
         tools.push(type_login_tool());
     }
     json!({"tools": tools})
@@ -99,7 +107,7 @@ pub async fn computer(hub: &Arc<Hub>, bot: &str, name: &str, args: Value) -> Res
     if !screen.computer_use() {
         bail!("Remote screen is turned off on this computer. Turn it on in Codync's menu there.");
     }
-    let backend = backend();
+    let backend = screen.backend();
     let read_only = match backend {
         Backend::AgentDesktop if !agent_desktop::offered(name) => bail!("unknown computer tool `{name}`"),
         Backend::AgentDesktop => agent_desktop::read_only(name),

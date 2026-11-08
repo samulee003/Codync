@@ -1866,5 +1866,8 @@
   "Mark done": "완료로 표시",
   "Cancel task": "작업 취소",
   "Delete task": "작업 삭제",
-  "Connect to this computer to use its board": "보드를 사용하려면 이 컴퓨터에 연결하세요"
+  "Connect to this computer to use its board": "보드를 사용하려면 이 컴퓨터에 연결하세요",
+  "Several bots at once": "여러 봇 동시 사용",
+  "Bots use apps in the background with agent-desktop, so more than one can work at the same time.": "봇이 agent-desktop으로 앱을 백그라운드에서 다루므로 여러 봇이 동시에 작업할 수 있습니다.",
+  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "agent-desktop이 설치되지 않아 봇이 번갈아 사용합니다. 설치: npm install -g agent-desktop"
 }

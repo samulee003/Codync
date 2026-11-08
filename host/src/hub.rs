@@ -133,6 +133,7 @@ impl Hub {
     pub fn new(store: Store, host_id: String, identity: Identity, token: String, port: u16) -> Arc<Self> {
         let (events, _) = broadcast::channel(1024);
         let screen = Arc::new(Screen::new(Screen::load_enabled(&store), events.clone()));
+        screen.restore_driver(&store);
         Arc::new(Self {
             analytics: crate::analytics::Analytics::load(&store),
             routines: crate::routines::Routines::default(),

@@ -3,6 +3,7 @@
 mod analytics;
 mod approvals;
 mod bot;
+mod driver;
 mod editor;
 mod events;
 mod exchange;

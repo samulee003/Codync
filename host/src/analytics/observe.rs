@@ -27,12 +27,14 @@ const FIXED: [(&str, Event, &str, &str); 14] = [
 ];
 
 /// Switches the host owns (`setting_changed`): the method and the setting it names.
-const SETTINGS: [(&str, &str); 5] = [
+const SETTINGS: [(&str, &str); 6] = [
     ("setCloud", "remote_access"),
     ("setApproval", "approval"),
     ("setHostAutomaticUpdates", "automatic_updates"),
     ("setScreenEnabled", "remote_screen"),
     ("setAssistants", "cloud_assistants"),
+    // `on`: agent-desktop (several bots at once) instead of the default driver.
+    ("setComputerDriver", "computer_driver"),
 ];
 
 /// The event an API call stands for, with its properties, read before the call runs.
@@ -48,7 +50,11 @@ pub fn observe(caller: &Caller, method: &str, b: &Value) -> Option<(Event, Map<S
         p.insert(key.into(), value.into());
         event
     } else if let Some(&(_, setting)) = SETTINGS.iter().find(|s| s.0 == method) {
-        let on = if method == "setApproval" { b["approval"] == "auto" } else { b["enabled"] == true };
+        let on = match method {
+            "setApproval" => b["approval"] == "auto",
+            "setComputerDriver" => b["driver"] == "agentDesktop",
+            _ => b["enabled"] == true,
+        };
         p.insert("setting".into(), setting.into());
         p.insert("on".into(), on.into());
         Event::SettingChanged

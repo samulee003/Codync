@@ -34,6 +34,8 @@ const LOCAL_ONLY: &[&str] = &[
     "checkHostUpdate",
     "setHostAutomaticUpdates",
     "setScreenEnabled",
+    // Which driver runs the bots' computer tools: set on the computer itself, like Remote screen.
+    "setComputerDriver",
     "requestScreenPermission",
     // Analytics is the computer owner's choice; phones decide only for themselves.
     "setAnalytics",

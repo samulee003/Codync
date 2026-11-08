@@ -35,6 +35,7 @@
 mod agent_desktop;
 mod computer;
 mod cua;
+mod driver_choice;
 mod helper;
 #[cfg(target_os = "linux")]
 mod helper_tools;
@@ -44,6 +45,7 @@ mod signaling;
 mod viewer;
 
 pub use computer::{computer, computer_tools};
+pub use driver_choice::ComputerDriver;
 pub use helper::serve_helpers;
 #[cfg(target_os = "linux")]
 pub use helper::supervise_linux_helper;
@@ -140,6 +142,8 @@ pub struct Screen {
     control: Mutex<Control>,
     sessions: Mutex<HashMap<String, Viewer>>,
     driver: cua::Driver,
+    /// The user's choice of driver for the bots' computer tools (`driver_choice`).
+    driver_choice: Mutex<ComputerDriver>,
     #[cfg_attr(windows, expect(dead_code, reason = "Windows has no screen helper yet"))]
     next_link: AtomicU64,
     #[cfg_attr(windows, expect(dead_code, reason = "Windows has no screen helper yet"))]
@@ -157,6 +161,7 @@ impl Screen {
             control: Mutex::default(),
             sessions: Mutex::default(),
             driver: cua::Driver::default(),
+            driver_choice: Mutex::default(),
             next_link: AtomicU64::new(1),
             helper_generation,
         }
@@ -183,7 +188,7 @@ impl Screen {
         let connected = self.link.locked().is_some();
         let viewers = self.sessions.locked().values().filter(|v| v.started()).count();
         let c = self.control.locked();
-        json!({
+        let mut state = json!({
             "enabled": self.enabled(),
             "connected": connected,
             "platform": st.platform,
@@ -196,7 +201,11 @@ impl Screen {
             "agentBots": c.active_agents(),
             "computerUse": self.computer_use(),
             "viewers": viewers,
-        })
+        });
+        if let (Some(state), Value::Object(driver)) = (state.as_object_mut(), self.driver_state()) {
+            state.extend(driver);
+        }
+        state
     }
 
     fn emit(&self) {

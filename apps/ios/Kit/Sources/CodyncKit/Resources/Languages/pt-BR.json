@@ -1866,5 +1866,8 @@
   "Mark done": "Marcar como concluída",
   "Cancel task": "Cancelar tarefa",
   "Delete task": "Excluir tarefa",
-  "Connect to this computer to use its board": "Conecte-se a este computador para usar o quadro dele"
+  "Connect to this computer to use its board": "Conecte-se a este computador para usar o quadro dele",
+  "Several bots at once": "Vários bots ao mesmo tempo",
+  "Bots use apps in the background with agent-desktop, so more than one can work at the same time.": "Os bots usam os apps em segundo plano com o agent-desktop, então vários podem trabalhar ao mesmo tempo.",
+  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "O agent-desktop não está instalado, então os bots ainda se revezam. Instale com: npm install -g agent-desktop"
 }

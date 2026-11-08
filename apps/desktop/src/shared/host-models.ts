@@ -73,7 +73,16 @@ export interface ScreenState {
   /** Bots with computer use can act here (Windows: always; elsewhere Remote screen is on). */
   computerUse: boolean
   viewers: number
+  /** Which driver runs the bots' computer tools (Settings → Computer access); undefined from hosts before the choice. */
+  driver?: ComputerDriver
+  /** The host's environment forces agent-desktop (`CODYNC_COMPUTER_DRIVER`), whatever `driver` says. */
+  driverForced?: boolean
+  /** The agent-desktop CLI is installed; without it the default driver runs. */
+  agentDesktopInstalled?: boolean
 }
+
+/** `default`: cua-driver, one bot at a time. `agentDesktop`: several bots at once, in the background. */
+export type ComputerDriver = 'default' | 'agentDesktop'
 
 export function normalizeScreen(raw: Partial<ScreenState> | undefined | null): ScreenState | null {
   if (!raw) return null
@@ -90,6 +99,9 @@ export function normalizeScreen(raw: Partial<ScreenState> | undefined | null): S
     agentBots: raw.agentBots ?? (raw.agentBot ? [raw.agentBot] : []),
     computerUse: raw.computerUse ?? false,
     viewers: raw.viewers ?? 0,
+    driver: raw.driver,
+    driverForced: raw.driverForced,
+    agentDesktopInstalled: raw.agentDesktopInstalled,
   }
 }
 

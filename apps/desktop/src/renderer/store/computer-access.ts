@@ -1,5 +1,5 @@
 import { computerAccessStep, computerPermissionSettings, type ComputerPermission, type ScreenAgentState } from '@shared/computer-access'
-import { normalizeScreen, type ScreenState } from '@shared/models'
+import { normalizeScreen, type ComputerDriver, type ScreenState } from '@shared/models'
 import { Observable } from '../lib/observable'
 import type { AppModel } from './app-model'
 
@@ -59,6 +59,18 @@ export class ComputerAccess extends Observable {
       await this.refresh()
     } catch (error) { this.actionError = message(error) }
     finally { this.busy = null; this.changed() }
+  }
+
+  /** Switches the driver of the bots' computer tools; the host answers its new screen state. */
+  async setDriver(driver: ComputerDriver) {
+    const client = this.app.local?.client
+    if (!client) return
+    this.actionError = null
+    try {
+      this.screen = normalizeScreen(await client.call<ScreenState>('setComputerDriver', { driver }))
+    } catch (error) {
+      this.actionError = message(error)
+    } finally { this.changed() }
   }
 
   async request(permission: ComputerPermission) {

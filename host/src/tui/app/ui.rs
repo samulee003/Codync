@@ -63,11 +63,13 @@ pub enum Action {
     AboutAnalytics,
     Language,
     ThinkingDetails,
+    /// Several bots at once: agent-desktop instead of the default driver for computer use.
+    ComputerDriver,
     Keys,
     Appearance(super::super::appearance::Appearance),
 }
 
-pub const ACTIONS: [(&str, &str, Action); 20] = [
+pub const ACTIONS: [(&str, &str, Action); 21] = [
     ("New bot…", "n", Action::NewBot),
     ("New group chat…", "m", Action::NewGroup),
     ("Extensions: agents, connectors, skills…", "A", Action::Market),
@@ -87,6 +89,7 @@ pub const ACTIONS: [(&str, &str, Action); 20] = [
     ("Appearance: Dark", "", Action::Appearance(super::super::appearance::Appearance::Dark)),
     ("App language…", "", Action::Language),
     ("Show thinking details", "", Action::ThinkingDetails),
+    ("Several bots at once", "", Action::ComputerDriver),
     ("Keys", "?", Action::Keys),
 ];
 

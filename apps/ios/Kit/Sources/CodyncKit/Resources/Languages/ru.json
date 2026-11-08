@@ -1866,5 +1866,8 @@
   "Mark done": "Отметить выполненной",
   "Cancel task": "Отменить задачу",
   "Delete task": "Удалить задачу",
-  "Connect to this computer to use its board": "Подключитесь к этому компьютеру, чтобы пользоваться его доской"
+  "Connect to this computer to use its board": "Подключитесь к этому компьютеру, чтобы пользоваться его доской",
+  "Several bots at once": "Несколько ботов одновременно",
+  "Bots use apps in the background with agent-desktop, so more than one can work at the same time.": "Боты работают с приложениями в фоне через agent-desktop, поэтому одновременно могут работать несколько.",
+  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "agent-desktop не установлен, поэтому боты пока работают по очереди. Установите: npm install -g agent-desktop"
 }
