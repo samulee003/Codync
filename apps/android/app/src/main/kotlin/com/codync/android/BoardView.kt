@@ -79,7 +79,12 @@ import com.codync.android.design.*
                 Symbol(task.status.symbol, size = 16.dp, tint = Palette.secondary)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(task.title, style = Type.body.medium, color = Palette.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    val subtitle = subtitle(task, state)
+                    val translate = translator()
+                    val subtitle = task.byline(
+                        name = { id -> state.bots.firstOrNull { it.id == id }?.name ?: id },
+                        parentTitle = { id -> state.tasks[id]?.title },
+                        tr = translate,
+                    )
                     if (subtitle.isNotEmpty()) Text(subtitle, style = Type.caption, color = Palette.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
@@ -91,13 +96,6 @@ import com.codync.android.design.*
         AnimatedVisibility(expanded) { TaskDetail(task, state, store) }
     }
 }
-
-/** Who holds it, its branch, and how many notes it has. */
-@Composable private fun subtitle(task: BoardTask, state: AppState): String = listOfNotNull(
-    task.claimedBy?.let { id -> state.bots.firstOrNull { it.id == id }?.name ?: id },
-    task.branch,
-    task.notes.size.takeIf { it > 0 }?.let { tr("{count} notes").replace("{count}", it.toString()) },
-).joinToString(" · ")
 
 /** A task's menu: one row per action; assigning lists this computer's bots, each its own row (`assignTo`: "Assign to {name}"). */
 private fun menuItems(task: BoardTask, state: AppState, store: AppStore, assignTo: String): List<MenuItem> =

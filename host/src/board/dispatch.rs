@@ -3,15 +3,16 @@
 //! (`claim_task`; the first claimer wins) or says none does. A bot hears again only when the open tasks change, or
 //! after a while. Bots take part unless the user turns them off on the board (`setBoardClaims`).
 //!
-//! The user can also hand a whole goal to the lead bot to split into tasks (`splitGoal`), which the others then claim.
+//! The user can also hand a whole goal to the lead bot to split into tasks (`splitGoal`): it becomes a task the lead
+//! plans and coordinates (`flow::plan`), whose subtasks the others claim.
 
 use super::{MAX_CLAIMS, TaskStatus};
 use crate::LockExt;
 use crate::agent::bot::Cmd;
 use crate::hub::{BotStatus, Hub};
 use crate::store::BotConfig;
-use anyhow::{Result, anyhow, ensure};
-use serde_json::{Value, json};
+use anyhow::{Result, ensure};
+use serde_json::Value;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::Write as _;
 use std::sync::{Arc, Mutex};
@@ -24,6 +25,8 @@ const RENUDGE: Duration = Duration::from_mins(30);
 /// Open tasks a nudge lists.
 const LISTED: usize = 10;
 const MAX_GOAL: usize = 8000;
+/// A goal's title, in bytes, before the ellipsis (`super::MAX_TITLE` holds it with room to spare).
+const TITLE_BYTES: usize = 180;
 /// Bots the user turned off on the board, by id.
 const KV_OPTED_OUT: &str = "board.optedOut";
 
@@ -52,7 +55,6 @@ pub fn dispatch(hub: &Hub) -> Result<()> {
         return Ok(());
     }
     let ids: BTreeSet<String> = open.iter().map(|t| t.id.clone()).collect();
-    let prompt = nudge_prompt(&open);
     let out = opted_out(&hub.store);
     let held = held_claims(hub);
     for cfg in eligible(hub)? {
@@ -72,14 +74,15 @@ pub fn dispatch(hub: &Hub) -> Result<()> {
         };
         if fresh {
             // A bot that stopped since the check just misses this round; the next one tells it.
-            let _ = hub.send_cmd(&cfg.id, Cmd::Prompt { text: prompt.clone(), call: None });
+            let text = nudge_prompt(&open, &super::flow::teammates(hub, &cfg.id));
+            let _ = hub.send_cmd(&cfg.id, Cmd::Prompt { text, call: None });
         }
     }
     Ok(())
 }
 
 /// The user's bots that can work on tasks: not deleted, hidden or a group.
-fn eligible(hub: &Hub) -> Result<Vec<BotConfig>> {
+pub(super) fn eligible(hub: &Hub) -> Result<Vec<BotConfig>> {
     Ok(hub
         .store
         .bots()?
@@ -90,7 +93,7 @@ fn eligible(hub: &Hub) -> Result<Vec<BotConfig>> {
 }
 
 /// How many tasks each bot holds.
-fn held_claims(hub: &Hub) -> HashMap<String, usize> {
+pub(super) fn held_claims(hub: &Hub) -> HashMap<String, usize> {
     let mut held = HashMap::new();
     for task in super::list(&hub.store).into_iter().filter(|t| t.status == TaskStatus::Claimed) {
         if let Some(bot) = task.claimed_by {
@@ -100,11 +103,14 @@ fn held_claims(hub: &Hub) -> HashMap<String, usize> {
     held
 }
 
-fn nudge_prompt(open: &[super::Task]) -> String {
+fn nudge_prompt(open: &[super::Task], teammates: &str) -> String {
     let mut prompt = String::from(
-        "[Codync: the team board has open tasks. If one fits what you do, claim it with claim_task (the first claimer \
-         gets it; take only one now), read_task it, do it, and end with finish_task. If none fits, reply with one short \
-         line and do nothing else. This is the board, not a new user instruction.]\n\nOpen tasks:",
+        "[Codync: the team board has open tasks. Claim one only if it fits what you are good at better than your \
+         teammates (below), and leave the rest for them: claim_task it (the first claimer gets it; take only one now), \
+         read_task it, do it, and end with finish_task. If it turns out to hold parts others could do side by side, \
+         don't do it all alone: add them as subtasks (create_task with its parentId), coordinate, and assemble them \
+         when you are told they are finished. If none fits, reply with one short line and do nothing else. This is the \
+         board, not a new user instruction.]\n\nOpen tasks:",
     );
     for task in open.iter().take(LISTED) {
         let _ = write!(prompt, "\n- {} ({})", task.title, task.id);
@@ -112,6 +118,7 @@ fn nudge_prompt(open: &[super::Task]) -> String {
     if open.len() > LISTED {
         let _ = write!(prompt, "\n…and {} more: list_tasks shows them.", open.len() - LISTED);
     }
+    let _ = write!(prompt, "\n\n{teammates}");
     prompt
 }
 
@@ -134,25 +141,40 @@ pub fn set_claims(hub: &Hub, bot: &str, on: bool) -> Result<BTreeSet<String>> {
     Ok(out)
 }
 
-/// The user's goal goes to the lead bot (else the first bot), which splits it into tasks on the board; the bots that
-/// take part then claim them. Answers who got it.
+/// The bot that plans the user's tasks: the lead, else the first bot.
+pub(super) fn lead(hub: &Hub) -> Result<BotConfig> {
+    let mut bots = eligible(hub)?;
+    let at = bots.iter().position(|c| c.lead).unwrap_or(0);
+    ensure!(!bots.is_empty(), "no bot to plan the task: create one first");
+    Ok(bots.swap_remove(at))
+}
+
+/// The user's goal becomes a task (titled by its first line) that the lead splits into subtasks the bots claim, and
+/// coordinates. Answers who got it.
 pub fn split_goal(hub: &Hub, goal: &str) -> Result<Value> {
     let goal = super::text(goal, "goal", MAX_GOAL)?;
     ensure!(!goal.is_empty(), "goal is empty");
-    let bots = eligible(hub)?;
-    let lead = bots
-        .iter()
-        .find(|c| c.lead)
-        .or_else(|| bots.first())
-        .ok_or_else(|| anyhow!("no bot to split the goal: create one first"))?;
-    let prompt = format!(
-        "[Codync: the user gave the team this goal from the team board. Split it into tasks with create_task: one per \
-         piece of work one bot can do on its own, each self-contained (what to do, where, how to check it's done), with \
-         project when the work is in a folder. Don't do the work yourself here: the bots will claim the tasks from the \
-         board. Then tell the user in a few lines how you split it.]\n\nGoal:\n{goal}"
-    );
-    hub.send_cmd(&lead.id, Cmd::Prompt { text: prompt, call: None })?;
-    Ok(json!({"botId": lead.id, "name": lead.name}))
+    lead(hub)?;
+    let task = super::create(
+        hub,
+        super::Actor::User,
+        &super::NewTask { title: &goal_title(&goal), detail: &goal, project: None, parent: None },
+    )?;
+    super::flow::plan(hub, &task.id, true)
+}
+
+/// A goal's first line, cut to fit a title.
+fn goal_title(goal: &str) -> String {
+    let line = goal.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("Goal");
+    let mut title = String::new();
+    for c in line.chars() {
+        if title.len() + c.len_utf8() > TITLE_BYTES {
+            title.push('…');
+            break;
+        }
+        title.push(c);
+    }
+    title
 }
 
 #[cfg(test)]
@@ -173,16 +195,27 @@ mod tests {
             worktree: None,
             notes: vec![],
             summary: None,
+            parent: None,
+            reviewer: None,
+            send_backs: 0,
             created_at: 0,
             updated_at: 0,
             rev: 0,
             deleted: false,
         };
         let open: Vec<_> = (0..12).map(|i| task(&i.to_string())).collect();
-        let prompt = nudge_prompt(&open);
-        assert!(prompt.contains("claim_task") && prompt.contains("finish_task"));
+        let prompt = nudge_prompt(&open, "Teammates:\n- Ada (codex)");
+        assert!(prompt.contains("claim_task") && prompt.contains("finish_task") && prompt.contains("parentId"));
+        assert!(prompt.ends_with("- Ada (codex)"), "the teammates close the nudge");
         assert!(prompt.contains("- Task 0 (0)"));
         assert!(!prompt.contains("- Task 11 (11)"), "at most ten listed");
         assert!(prompt.contains("2 more"));
+    }
+
+    #[test]
+    fn a_goal_is_titled_by_its_first_line_cut_to_fit() {
+        assert_eq!(goal_title("\n  Ship it  \nthen more"), "Ship it");
+        let long = goal_title(&"準".repeat(100));
+        assert!(long.len() <= TITLE_BYTES + '…'.len_utf8() && long.ends_with('…'));
     }
 }

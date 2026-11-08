@@ -78,8 +78,9 @@ public struct BoardView: View {
                         Image(systemName: task.status.symbol).font(.system(size: 15)).foregroundStyle(Palette.secondary)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(task.title).font(.body.weight(.medium)).foregroundStyle(Palette.text).lineLimit(2)
-                            if !subtitle(task).isEmpty {
-                                Text(subtitle(task)).font(.caption).foregroundStyle(Palette.secondary).lineLimit(1)
+                            let byline = byline(task)
+                            if !byline.isEmpty {
+                                Text(byline).font(.caption).foregroundStyle(Palette.secondary).lineLimit(1)
                             }
                         }
                         Spacer(minLength: 0)
@@ -101,13 +102,9 @@ public struct BoardView: View {
         .outlinedCard(vertical: 10)
     }
 
-    /// Who holds it, its branch, and how many notes it has.
-    private func subtitle(_ task: BoardTask) -> String {
-        var parts: [String] = []
-        if let bot = task.claimedBy { parts.append(model.bots[bot]?.name ?? bot) }
-        if let branch = task.branch { parts.append(branch) }
-        if !task.notes.isEmpty { parts.append(L10n.tr("{count} notes").replacingOccurrences(of: "{count}", with: "\(task.notes.count)")) }
-        return parts.joined(separator: " · ")
+    /// Who holds it, who checks it, the task it is part of, its branch, and how many notes it has.
+    private func byline(_ task: BoardTask) -> String {
+        task.byline(name: { model.bots[$0]?.name ?? $0 }, parentTitle: { model.tasks[$0]?.title })
     }
 
     private func menuItems(_ task: BoardTask) -> [MenuItem] {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { boardColumns, taskActions, type BoardTask, type TaskAction } from '@shared/board'
+import { boardColumns, taskActions, taskByline, type BoardTask, type TaskAction } from '@shared/board'
 import { DropdownMenu, Reveal } from '../../components/Controls'
 import { BotAvatar } from '../../components/Avatar'
 import { Icon } from '../../components/Icon'
@@ -78,6 +78,7 @@ export function BoardView() {
 const STATUS_ICON: Record<BoardTask['status'], string> = {
   open: 'circle',
   claimed: 'circle.dotted',
+  checking: 'checkmark.seal',
   review: 'arrow.triangle.merge',
   done: 'checkmark.circle.fill',
   cancelled: 'xmark.circle',
@@ -88,7 +89,11 @@ function TaskRow({ task, run }: { task: BoardTask; run: (work: Promise<unknown>)
   const store = useStore()
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
-  const claimer = task.claimedBy ? store.bots.get(task.claimedBy)?.name ?? task.claimedBy : null
+  const byline = taskByline(task, {
+    name: (bot) => store.bots.get(bot)?.name ?? bot,
+    parentTitle: (id) => store.board.byId.get(id)?.title,
+    tr,
+  })
   const addNote = () => {
     if (!note.trim()) return
     run(store.board.note(store.client, task.id, note).then(() => setNote('')))
@@ -101,7 +106,7 @@ function TaskRow({ task, run }: { task: BoardTask; run: (work: Promise<unknown>)
           <VStack gap={2} grow>
             <Text size="body" weight="medium" lines={2}>{task.title}</Text>
             <Text size="caption" tone="secondary" truncate>
-              {[claimer, task.branch, task.notes.length ? tr('{count} notes').replace('{count}', String(task.notes.length)) : null].filter(Boolean).join(' · ')}
+              {byline}
             </Text>
           </VStack>
         </button>

@@ -191,6 +191,10 @@ fn call_event(method: &str, b: &Value, p: &mut Map<String, Value>) -> Option<Eve
             let name = b["name"].as_str().unwrap_or_default();
             p.insert("action".into(), name.strip_suffix("_task").unwrap_or("other").into());
             p.insert("by".into(), "bot".into());
+            // A check's outcome: accepted or sent back.
+            if let Some(approve) = b["arguments"]["approve"].as_bool().filter(|_| name == "review_task") {
+                p.insert("approved".into(), approve.into());
+            }
             Event::TaskChanged
         }
         "agentSetup" | "agentAuthenticate" => {

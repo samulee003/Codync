@@ -29,3 +29,15 @@ private func taskJSON(_ id: String, status: String, updatedAt: Int64, branch: St
     #expect(columns.first?.tasks.map(\.id) == ["b", "a"])
     #expect(try decode(taskJSON("e", status: "review", updatedAt: 1)).actions == [.done, .reopen, .cancel], "no branch, no merge")
 }
+
+@Test func aTaskBeingCheckedNamesItsCheckerAndParent() throws {
+    let json = #"{"id":"s","title":"Slides","status":"checking","claimedBy":"ada","reviewer":"bo","parent":"p","notes":[],"createdAt":0,"updatedAt":1,"rev":1}"#
+    let task = try JSONDecoder().decode(BoardTask.self, from: Data(json.utf8))
+    #expect(task.status == .checking && task.actions == [.done, .reopen, .cancel])
+    let byline = task.byline(name: { $0.uppercased() }, parentTitle: { $0 == "p" ? "Workshop" : nil })
+    #expect(byline.hasPrefix("ADA · ") && byline.contains("BO") && byline.hasSuffix("↳ Workshop"))
+    var claimed = task
+    claimed.status = .claimed
+    #expect(claimed.actions.first == .assign, "the user can hand a planned task to another bot")
+    #expect(claimed.byline(name: { $0 }, parentTitle: { _ in nil }) == "ada", "the checker shows only while checking")
+}

@@ -1878,5 +1878,7 @@
   "Bots that claim tasks on their own": "自分からタスクを担当するボット",
   "Add a task with +, or split a whole goal into tasks with the wand.": "+ でタスクを追加するか、ワンドで目標全体をタスクに分割します。",
   "Clear": "クリア",
-  "{percent}% left": "残り {percent}%"
+  "{percent}% left": "残り {percent}%",
+  "Being checked": "確認中",
+  "Checked by {name}": "{name}が確認"
 }

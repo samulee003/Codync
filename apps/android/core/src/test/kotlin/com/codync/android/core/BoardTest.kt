@@ -34,4 +34,16 @@ class BoardTest {
         assertFalse(hasBoard("2.40.3"))
         assertTrue(hasBoard("2.41.0"))
     }
+
+    @Test fun `a task being checked names its checker and parent`() {
+        val task = BoardTask.decode(buildJsonObject {
+            put("id", "s"); put("title", "Slides"); put("status", "checking"); put("claimedBy", "ada"); put("reviewer", "bo"); put("parent", "p")
+        })
+        assertEquals(listOf(TaskAction.Done, TaskAction.Reopen, TaskAction.Cancel), task.actions)
+        val byline = task.byline({ it.uppercase() }, { if (it == "p") "Workshop" else null }, { it })
+        assertEquals("ADA · Checked by BO · ↳ Workshop", byline)
+        val claimed = task.copy(status = TaskStatus.Claimed)
+        assertEquals(TaskAction.Assign, claimed.actions.first())
+        assertEquals("ada", claimed.byline({ it }, { null }, { it }))
+    }
 }

@@ -24,7 +24,7 @@ fn folder() -> String {
 }
 
 fn new_task(hub: &Hub, title: &str, project: Option<&str>) -> Task {
-    create(hub, Actor::User, &NewTask { title, detail: "", project }).unwrap()
+    create(hub, Actor::User, &NewTask { title, detail: "", project, parent: None }).unwrap()
 }
 
 /// git in `dir` alone: a pre-commit hook running these tests sets `GIT_DIR` for the commit.
@@ -95,8 +95,14 @@ async fn release_note_and_finish_without_a_repository() {
     assert_eq!(noted.notes.last().unwrap().text, format!("finding {}", MAX_NOTES + 4), "the oldest go first");
 
     assert!(finish(&hub, &task.id, "bo", " ").await.unwrap_err().to_string().contains("summary"));
-    let done = finish(&hub, &task.id, "bo", "Fixed the null check; ran the tests").await.unwrap();
-    assert_eq!(done.status, TaskStatus::Done, "no branch: nothing to review");
+    let checking = finish(&hub, &task.id, "bo", "Fixed the null check; ran the tests").await.unwrap();
+    assert_eq!(
+        (checking.status, checking.reviewer.as_deref()),
+        (TaskStatus::Checking, Some("ada")),
+        "the other bot checks"
+    );
+    let done = flow::review(&hub, &task.id, "ada", true, "").unwrap();
+    assert_eq!(done.status, TaskStatus::Done, "no branch: nothing to merge");
     assert!(claim(&hub, &task.id, "ada").await.unwrap_err().to_string().contains("only an open task"));
 }
 
@@ -119,8 +125,10 @@ async fn a_git_task_works_on_its_own_worktree_and_merges() {
     git(&tree, &["commit", "-q", "-m", "Add b"]);
     assert!(!project.join("b.txt").exists(), "the project's own checkout is untouched");
 
-    let review = finish(&hub, &task.id, "ada", "Added b").await.unwrap();
-    assert_eq!(review.status, TaskStatus::Review);
+    assert_eq!(finish(&hub, &task.id, "ada", "Added b").await.unwrap().status, TaskStatus::Checking);
+    let review = flow::review(&hub, &task.id, "bo", true, "b.txt holds two").unwrap();
+    assert_eq!(review.status, TaskStatus::Review, "checked: waits for the user's merge");
+    assert_eq!(review.notes.last().unwrap().text, "Checked: b.txt holds two");
 
     let merged = merge(&hub, &task.id).await.unwrap();
     assert_eq!((merged.status, merged.worktree.clone(), merged.branch.clone()), (TaskStatus::Done, None, None));
@@ -139,6 +147,7 @@ async fn a_conflicting_merge_leaves_the_project_as_it_was() {
     std::fs::write(tree.join("a.txt"), "theirs\n").unwrap();
     git(&tree, &["commit", "-q", "-am", "theirs"]);
     finish(&hub, &task.id, "ada", "Changed a").await.unwrap();
+    flow::review(&hub, &task.id, "bo", true, "").unwrap();
     std::fs::write(project.join("a.txt"), "ours\n").unwrap();
     git(&project, &["commit", "-q", "-am", "ours"]);
 
@@ -229,10 +238,80 @@ async fn idle_bots_hear_about_open_tasks_once_unless_turned_off() {
 }
 
 #[tokio::test]
-async fn a_goal_goes_to_the_lead_bot() {
+async fn a_goal_becomes_a_task_the_lead_plans() {
     let hub = hub();
     assert!(dispatch::split_goal(&hub, "  ").is_err(), "an empty goal");
-    // No actor runs in tests, so handing it over fails after choosing the bot.
-    let error = dispatch::split_goal(&hub, "Prepare the exam papers").unwrap_err().to_string();
-    assert_eq!(error, "unknown bot");
+    let lead: BotConfig =
+        serde_json::from_value(json!({"id": "cy", "name": "CY", "backend": "codex", "cwd": folder(), "lead": true}))
+            .unwrap();
+    hub.store.save_bot(&lead).unwrap();
+    let got = dispatch::split_goal(&hub, "Prepare the exam papers\nfor both kids").unwrap();
+    assert_eq!(got["botId"], "cy", "the lead");
+    let task = list(&hub.store).into_iter().next().unwrap();
+    assert_eq!((task.title.as_str(), task.claimed_by.as_deref()), ("Prepare the exam papers", Some("cy")));
+    assert_eq!(task.detail, "Prepare the exam papers\nfor both kids");
+    assert!(task.worktree.is_none(), "planning claims no worktree");
+}
+
+#[tokio::test]
+async fn a_coordinator_finishes_only_after_its_subtasks() {
+    let hub = hub();
+    let parent = new_task(&hub, "Run the workshop", None);
+    flow::plan(&hub, &parent.id, false).unwrap();
+    let coordinator = get(&hub.store, &parent.id).unwrap().claimed_by.unwrap();
+    let worker = if coordinator == "ada" { "bo" } else { "ada" };
+
+    let made = tools::call(&hub, &coordinator, "create_task", &json!({"title": "Slides", "parentId": parent.id}))
+        .await
+        .unwrap();
+    let part = made["task"]["id"].as_str().unwrap().to_owned();
+    assert_eq!(made["task"]["parentId"], parent.id.as_str());
+    let read = tools::call(&hub, &coordinator, "read_task", &json!({"taskId": parent.id})).await.unwrap();
+    assert_eq!(read["task"]["subtasks"][0]["title"], "Slides");
+
+    let early = finish(&hub, &parent.id, &coordinator, "Assembled").await.unwrap_err().to_string();
+    assert!(early.contains("1 subtasks"), "{early}");
+    claim(&hub, &part, worker).await.unwrap();
+    finish(&hub, &part, worker, "31 slides").await.unwrap();
+    assert!(finish(&hub, &parent.id, &coordinator, "Assembled").await.is_err(), "still being checked");
+    tools::call(&hub, &coordinator, "review_task", &json!({"taskId": part, "approve": true})).await.unwrap();
+    let assembled = finish(&hub, &parent.id, &coordinator, "Assembled").await.unwrap();
+    assert_eq!((assembled.status, assembled.reviewer.as_deref()), (TaskStatus::Checking, Some(worker)));
+
+    let closed = new_task(&hub, "Old", None);
+    set_status(&hub, &closed.id, TaskStatus::Done).await.unwrap();
+    let orphan = NewTask { title: "Late", detail: "", project: None, parent: Some(&closed.id) };
+    assert!(create(&hub, Actor::User, &orphan).unwrap_err().to_string().contains("parent task is done"));
+}
+
+#[tokio::test]
+async fn a_checker_sends_work_back_twice_at_most() {
+    let hub = hub();
+    let task = new_task(&hub, "Write the guide", None);
+    claim(&hub, &task.id, "ada").await.unwrap();
+    for round in 1..=2 {
+        finish(&hub, &task.id, "ada", "Wrote it").await.unwrap();
+        assert!(flow::review(&hub, &task.id, "ada", true, "").is_err(), "the claimer doesn't check its own work");
+        assert!(flow::review(&hub, &task.id, "bo", false, " ").unwrap_err().to_string().contains("what to fix"));
+        let back = flow::review(&hub, &task.id, "bo", false, "Step 3 is missing").unwrap();
+        assert_eq!(
+            (back.status, back.claimed_by.as_deref(), back.send_backs),
+            (TaskStatus::Claimed, Some("ada"), round)
+        );
+        assert_eq!(back.notes.last().unwrap().text, "Sent back: Step 3 is missing");
+    }
+    let done = finish(&hub, &task.id, "ada", "Added step 3").await.unwrap();
+    assert_eq!(done.status, TaskStatus::Done, "sent back twice: the next finish counts");
+}
+
+#[tokio::test]
+async fn the_user_can_hand_a_planned_task_to_another_bot() {
+    let hub = hub();
+    let task = new_task(&hub, "Fix the login", None);
+    flow::plan(&hub, &task.id, false).unwrap();
+    let lead = get(&hub.store, &task.id).unwrap().claimed_by.unwrap();
+    let other = if lead == "ada" { "bo" } else { "ada" };
+    // No actor runs in tests: telling the bot fails once the task is claimed for it.
+    assert_eq!(assign(&hub, &task.id, other).await.unwrap_err().to_string(), "unknown bot");
+    assert_eq!(get(&hub.store, &task.id).unwrap().claimed_by.as_deref(), Some(other));
 }

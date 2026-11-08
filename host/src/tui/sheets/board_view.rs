@@ -38,7 +38,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, b: &BoardSheet) {
                         let base = row(buf, inner, y, *i == b.cursor);
                         let label = format!("{} {}", mark(task.status), task.title);
                         put(buf, inner.x, y, u(room) + 2, &truncate(&label, room + 2), t.text.patch(base));
-                        rput(buf, inner.right(), y, &meta(app, task), t.dim.patch(base));
+                        rput(buf, inner.right(), y, &meta(app, tasks, task), t.dim.patch(base));
                     }
                     Line::Detail(text) => {
                         let shown = truncate(text, usize::from(inner.width.saturating_sub(4)));
@@ -97,19 +97,30 @@ fn mark(status: TaskStatus) -> &'static str {
     match status {
         TaskStatus::Open => "○",
         TaskStatus::Claimed => "◐",
+        TaskStatus::Checking => "◎",
         TaskStatus::Review => "⇄",
         TaskStatus::Done => "✓",
         TaskStatus::Cancelled => "×",
     }
 }
 
-/// Who holds it, its branch, and when it last changed.
-fn meta(app: &App, task: &Task) -> String {
-    let parts: Vec<String> =
-        [task.claimed_by.as_deref().map(|b| who(app, b)), task.branch.clone(), Some(when(task.updated_at))]
-            .into_iter()
-            .flatten()
-            .collect();
+/// Who holds it, who checks it, the task it is part of, its branch, and when it last changed.
+fn meta(app: &App, tasks: &[Task], task: &Task) -> String {
+    let checker = (task.status == TaskStatus::Checking)
+        .then(|| task.reviewer.as_deref().map(|b| tr("Checked by {name}").replace("{name}", &who(app, b))))
+        .flatten();
+    let parent =
+        task.parent.as_deref().and_then(|id| tasks.iter().find(|t| t.id == id)).map(|t| format!("↳ {}", t.title));
+    let parts: Vec<String> = [
+        task.claimed_by.as_deref().map(|b| who(app, b)),
+        checker,
+        parent,
+        task.branch.clone(),
+        Some(when(task.updated_at)),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
     parts.join(" · ")
 }
 
@@ -124,9 +135,15 @@ mod tests {
 
     #[test]
     fn every_status_has_its_own_mark() {
-        let marks =
-            [TaskStatus::Open, TaskStatus::Claimed, TaskStatus::Review, TaskStatus::Done, TaskStatus::Cancelled]
-                .map(mark);
+        let marks = [
+            TaskStatus::Open,
+            TaskStatus::Claimed,
+            TaskStatus::Checking,
+            TaskStatus::Review,
+            TaskStatus::Done,
+            TaskStatus::Cancelled,
+        ]
+        .map(mark);
         let unique: std::collections::HashSet<_> = marks.iter().collect();
         assert_eq!(unique.len(), marks.len());
     }

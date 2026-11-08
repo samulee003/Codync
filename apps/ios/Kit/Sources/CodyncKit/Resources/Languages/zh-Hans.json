@@ -1878,5 +1878,7 @@
   "Bots that claim tasks on their own": "主动领任务的 bot",
   "Add a task with +, or split a whole goal into tasks with the wand.": "用 + 新建任务，或用魔杖把整个目标拆成任务。",
   "Clear": "清除",
-  "{percent}% left": "剩余 {percent}%"
+  "{percent}% left": "剩余 {percent}%",
+  "Being checked": "审查中",
+  "Checked by {name}": "由{name}审查"
 }

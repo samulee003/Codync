@@ -1878,5 +1878,7 @@
   "Bots that claim tasks on their own": "Bot che prendono attività da soli",
   "Add a task with +, or split a whole goal into tasks with the wand.": "Aggiungi un’attività con + o dividi un intero obiettivo in attività con la bacchetta.",
   "Clear": "Cancella",
-  "{percent}% left": "Rimane il {percent}%"
+  "{percent}% left": "Rimane il {percent}%",
+  "Being checked": "In verifica",
+  "Checked by {name}": "Verifica {name}"
 }

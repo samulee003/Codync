@@ -1,7 +1,7 @@
 // The team board on the wire (`host/src/board/`): tasks the user and the bots share.
 import { isBelow } from './compat.ts'
 
-export type TaskStatus = 'open' | 'claimed' | 'review' | 'done' | 'cancelled'
+export type TaskStatus = 'open' | 'claimed' | 'checking' | 'review' | 'done' | 'cancelled'
 
 export interface TaskNote {
   /** The bot that wrote it; null: the user. */
@@ -24,6 +24,10 @@ export interface BoardTask {
   worktree: string | null
   notes: TaskNote[]
   summary: string | null
+  /** The task this one is a part of (a subtask). */
+  parent?: string | null
+  /** The bot that checks (or checked) the finished work. */
+  reviewer?: string | null
   createdAt: number
   updatedAt: number
   rev: number
@@ -34,6 +38,7 @@ export interface BoardTask {
 export const TASK_COLUMNS: { status: TaskStatus; title: string }[] = [
   { status: 'open', title: 'Open' },
   { status: 'claimed', title: 'In progress' },
+  { status: 'checking', title: 'Being checked' },
   { status: 'review', title: 'Ready to merge' },
   { status: 'done', title: 'Done' },
   { status: 'cancelled', title: 'Cancelled' },
@@ -51,11 +56,28 @@ export type TaskAction = 'assign' | 'merge' | 'reopen' | 'done' | 'cancel' | 'de
 export function taskActions(task: Pick<BoardTask, 'status' | 'branch'>): TaskAction[] {
   switch (task.status) {
     case 'open': return ['assign', 'done', 'cancel', 'delete']
-    case 'claimed': return ['reopen', 'cancel']
+    case 'claimed': return ['assign', 'reopen', 'cancel']
+    case 'checking': return ['done', 'reopen', 'cancel']
     case 'review': return task.branch ? ['merge', 'reopen', 'cancel'] : ['done', 'reopen', 'cancel']
     case 'done':
     case 'cancelled': return ['reopen', 'delete']
   }
+}
+
+/** A task's byline: who holds it, who checks it, the task it is part of, its branch and how many notes it has. */
+export function taskByline(
+  task: BoardTask,
+  look: { name: (bot: string) => string; parentTitle: (id: string) => string | undefined; tr: (key: string) => string },
+): string {
+  const { name, parentTitle, tr } = look
+  const parent = task.parent ? parentTitle(task.parent) : undefined
+  return [
+    task.claimedBy ? name(task.claimedBy) : null,
+    task.status === 'checking' && task.reviewer ? tr('Checked by {name}').replace('{name}', name(task.reviewer)) : null,
+    parent ? `↳ ${parent}` : null,
+    task.branch,
+    task.notes.length ? tr('{count} notes').replace('{count}', String(task.notes.length)) : null,
+  ].filter(Boolean).join(' · ')
 }
 
 /** Keeps the newer of two copies of a task (by rev). */

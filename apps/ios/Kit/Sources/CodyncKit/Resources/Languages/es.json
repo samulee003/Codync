@@ -1878,5 +1878,7 @@
   "Bots that claim tasks on their own": "Bots que toman tareas por su cuenta",
   "Add a task with +, or split a whole goal into tasks with the wand.": "Añade una tarea con + o divide todo un objetivo en tareas con la varita.",
   "Clear": "Borrar",
-  "{percent}% left": "Queda un {percent}%"
+  "{percent}% left": "Queda un {percent}%",
+  "Being checked": "En revisión",
+  "Checked by {name}": "Revisa {name}"
 }

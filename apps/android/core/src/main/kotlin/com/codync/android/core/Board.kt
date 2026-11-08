@@ -21,6 +21,10 @@ import kotlinx.serialization.json.decodeFromJsonElement
     val worktree: String? = null,
     val notes: List<TaskNote> = emptyList(),
     val summary: String? = null,
+    /** The task this one is a part of (a subtask). */
+    val parent: String? = null,
+    /** The bot that checks (or checked) the finished work. */
+    val reviewer: String? = null,
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
     val rev: Long = 0,
@@ -29,11 +33,21 @@ import kotlinx.serialization.json.decodeFromJsonElement
     /** The actions its status allows, in menu order. */
     val actions: List<TaskAction> get() = when (status) {
         TaskStatus.Open -> listOf(TaskAction.Assign, TaskAction.Done, TaskAction.Cancel, TaskAction.Delete)
-        TaskStatus.Claimed -> listOf(TaskAction.Reopen, TaskAction.Cancel)
+        TaskStatus.Claimed -> listOf(TaskAction.Assign, TaskAction.Reopen, TaskAction.Cancel)
+        TaskStatus.Checking -> listOf(TaskAction.Done, TaskAction.Reopen, TaskAction.Cancel)
         TaskStatus.Review -> if (branch == null) listOf(TaskAction.Done, TaskAction.Reopen, TaskAction.Cancel)
             else listOf(TaskAction.Merge, TaskAction.Reopen, TaskAction.Cancel)
         TaskStatus.Done, TaskStatus.Cancelled -> listOf(TaskAction.Reopen, TaskAction.Delete)
     }
+
+    /** Its byline: who holds it, who checks it, the task it is part of, its branch and how many notes it has. */
+    fun byline(name: (String) -> String, parentTitle: (String) -> String?, tr: (String) -> String): String = listOfNotNull(
+        claimedBy?.let(name),
+        reviewer?.takeIf { status == TaskStatus.Checking }?.let { tr("Checked by {name}").replace("{name}", name(it)) },
+        parent?.let(parentTitle)?.let { "↳ $it" },
+        branch,
+        notes.size.takeIf { it > 0 }?.let { tr("{count} notes").replace("{count}", it.toString()) },
+    ).joinToString(" · ")
 
     companion object {
         fun decode(value: JsonElement): BoardTask = WireJson.decodeFromJsonElement<BoardTask>(value).also {
@@ -45,6 +59,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 @Serializable enum class TaskStatus(val title: String, val symbol: String) {
     @SerialName("open") Open("Open", "circle"),
     @SerialName("claimed") Claimed("In progress", "circle.dotted"),
+    @SerialName("checking") Checking("Being checked", "checkmark.seal"),
     @SerialName("review") Review("Ready to merge", "arrow.triangle.merge"),
     @SerialName("done") Done("Done", "checkmark.circle.fill"),
     @SerialName("cancelled") Cancelled("Cancelled", "xmark.circle");

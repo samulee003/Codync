@@ -27,8 +27,15 @@ pub(super) async fn call(hub: &Arc<Hub>, method: &str, b: Value) -> Result<Contr
                 title: str_arg(&b, "title")?,
                 detail: b["detail"].as_str().unwrap_or_default(),
                 project: b["project"].as_str(),
+                parent: None,
             };
-            board::create(hub, Actor::User, &new)?
+            let task = board::create(hub, Actor::User, &new)?;
+            // The lead plans it: splits it into subtasks, takes it, or leaves it for a better-fitting bot. With no bot
+            // yet, it just waits on the board.
+            if let Err(error) = board::flow::plan(hub, &task.id, false) {
+                tracing::info!(error = format!("{error:#}"), "new task left open: no bot to plan it");
+            }
+            board::get(&hub.store, &task.id)?
         }
         "editTask" => board::edit(hub, str_arg(&b, "taskId")?, b["title"].as_str(), b["detail"].as_str())?,
         "noteTask" => board::note(hub, str_arg(&b, "taskId")?, Actor::User, str_arg(&b, "text")?)?,

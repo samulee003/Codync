@@ -9,14 +9,15 @@ use super::super::app::{App, Editor, Overlay};
 use super::{BoardSheet, Fields, Input, Reply, Submit};
 use crate::board::{Task, TaskStatus};
 
-/// The board's order: open, in progress, ready to merge, done, cancelled; newest first in each.
+/// The board's order: open, in progress, being checked, ready to merge, done, cancelled; newest first in each.
 pub fn sorted(mut tasks: Vec<Task>) -> Vec<Task> {
     let rank = |s: TaskStatus| match s {
         TaskStatus::Open => 0,
         TaskStatus::Claimed => 1,
-        TaskStatus::Review => 2,
-        TaskStatus::Done => 3,
-        TaskStatus::Cancelled => 4,
+        TaskStatus::Checking => 2,
+        TaskStatus::Review => 3,
+        TaskStatus::Done => 4,
+        TaskStatus::Cancelled => 5,
     };
     tasks.retain(|t| !t.deleted);
     tasks.sort_by_key(|t| (rank(t.status), std::cmp::Reverse(t.updated_at)));
@@ -28,6 +29,7 @@ pub fn heading(status: TaskStatus) -> &'static str {
     match status {
         TaskStatus::Open => "Open",
         TaskStatus::Claimed => "In progress",
+        TaskStatus::Checking => "Being checked",
         TaskStatus::Review => "Ready to merge",
         TaskStatus::Done => "Done",
         TaskStatus::Cancelled => "Cancelled",

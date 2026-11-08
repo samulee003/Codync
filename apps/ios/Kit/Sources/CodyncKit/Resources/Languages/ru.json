@@ -1878,5 +1878,7 @@
   "Bots that claim tasks on their own": "Боты, которые сами берут задачи",
   "Add a task with +, or split a whole goal into tasks with the wand.": "Добавьте задачу через + или разбейте всю цель на задачи палочкой.",
   "Clear": "Очистить",
-  "{percent}% left": "Осталось {percent}%"
+  "{percent}% left": "Осталось {percent}%",
+  "Being checked": "На проверке",
+  "Checked by {name}": "Проверяет {name}"
 }

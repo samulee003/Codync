@@ -9,13 +9,15 @@ board and send intents.
 ## Tasks
 
 A task has a title, a detail, an optional project folder (absolute, an existing directory), a status, who added it (a
-bot or the user), who claimed it, its branch and worktree, notes (at most 50, oldest dropped first) and the claimer's
-summary.
+bot or the user), who claimed it, its branch and worktree, notes (at most 50, oldest dropped first), the claimer's
+summary, the task it is a part of (`parent`, a subtask), who checks it (`reviewer`) and how often it was sent back
+(`sendBacks`).
 
 | Status | Means | Next |
 |---|---|---|
 | `open` | Waiting for a claimer | claimed by a bot, or assigned to one by the user |
 | `claimed` | A bot holds it (at most 3 per bot) | `finish_task`, `release_task`, or the user reopens/cancels it |
+| `checking` | Finished; another bot checks the result | `review_task` accepts it (`review`/`done`) or sends it back (`claimed`) |
 | `review` | Finished on its branch, waiting for the user's merge | `mergeTask`, or reopen/cancel |
 | `done` | Finished (merged, or no branch) | reopen, delete |
 | `cancelled` | Dropped | reopen, delete |
@@ -32,9 +34,26 @@ fewer than 3 tasks gets a host-started turn in its own chat listing the open tas
 tasks changes, or after 30 minutes. Every bot takes part unless the user turns it off on the board
 (`setBoardClaims {botId, on}`, saved in kv `board.optedOut`; `tasks` answers `optedOut`).
 
-**Split a goal** (`splitGoal {goal}`): the goal goes to the lead bot (else the first bot) in a host-started turn that
-asks it to split the goal into self-contained tasks with `create_task` and not do the work itself; the bots then claim
-them. The answer names the bot (`{botId, name}`).
+Each nudge also lists the bot's teammates (name, agent, model, description) and asks it to claim only work that fits it
+better than them, and to split a task that turns out to hold parallel parts into subtasks instead of doing it alone.
+
+## The lead plans, bots check each other (`board/flow.rs`)
+
+A user's work never sits for the fastest bot to grab whole:
+
+- **Planning.** A task the user adds (`createTask`) is claimed for the lead bot (else the first bot), without a worktree,
+  in a host-started turn: split it into subtasks if it has parts others could do side by side, else do it if it fits, or
+  `release_task` it (naming who fits) for the board. **Split a goal** (`splitGoal {goal}`) makes the goal such a task
+  (titled by its first line) and asks the lead to split it. Both answer the planner (`{botId, name}`); the user can
+  still hand the task to another bot (`assignTask` takes it from the lead).
+- **Subtasks.** `create_task` with `parentId` adds a part. The parent's claimer coordinates: it can't `finish_task`
+  while a subtask is `open`, `claimed` or `checking`, and when the last one is finished (or the user closes it) it gets
+  a turn listing the parts and their summaries, to check and assemble them and finish the parent.
+- **Checking.** `finish_task` puts the task in `checking` with a checker: another bot that takes part, idle ones first,
+  then the one holding fewest tasks. The checker gets a turn to look at the result itself and answer `review_task
+  {taskId, approve, feedback}`: accepted, the task goes to `review` (a branch to merge) or `done`; sent back, the
+  feedback becomes a note ("Sent back: …") and the claimer gets the task again with it. After two send-backs, or with
+  no other bot, a finish settles without a check.
 
 ## Git worktrees
 
@@ -51,18 +70,22 @@ task removes its worktree and keeps its branch, so no commit is lost. `GIT_*` va
 ## Bots' tools
 
 On every bot's `team` MCP server, next to `list_bots` and `message_bot`: `list_tasks` (`status`, `mine`), `read_task`,
-`create_task` (project defaults to the bot's folder), `claim_task` (answers `workIn` with the worktree), `note_task`,
-`finish_task` (`summary` required) and `release_task` (`reason` becomes a note).
+`create_task` (project defaults to the bot's folder; `parentId` for a subtask), `claim_task` (answers `workIn` with the
+worktree), `note_task`, `finish_task` (`summary` required), `release_task` (`reason` becomes a note) and `review_task`
+(`approve`, `feedback`). `read_task` includes `checkedBy`, `parentId` and the `subtasks` with their summaries.
 
 ## App methods and sync
 
-`tasks`, `createTask {title, detail?, project?}`, `editTask {taskId, title?, detail?}`, `noteTask {taskId, text}`,
+`tasks`, `createTask {title, detail?, project?}` (the lead plans it), `editTask {taskId, title?, detail?}`, `noteTask {taskId, text}`,
 `assignTask {taskId, botId}` (claims the task for the bot and starts a turn in its own chat), `setTaskStatus {taskId,
 status: open|done|cancelled}`, `mergeTask {taskId}`, `deleteTask {taskId}`. Tasks are kept in kv `board.task.<id>`,
 each change stamped with a rev and sent as `{"type": "task", "task": …}`; the catch-up replays changes after `since`,
 and a deleted task stays as a tombstone (`deleted: true`) so clients drop it. Older apps ignore the event.
 
 ## Clients
+
+Every client shows the `checking` column (*Being checked*), who checks a task (*Checked by {name}*) and the task a
+subtask is part of (*↳ title*).
 
 | Client | Where | Actions |
 |---|---|---|

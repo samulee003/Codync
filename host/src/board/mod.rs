@@ -3,6 +3,10 @@
 //! git project gets its own worktree and branch when claimed (`git`), so bots working side by side never edit the
 //! same checkout; the user merges a finished task's branch from the board. Tasks live in kv (`board.task.<id>`),
 //! each change stamped with a rev and sent as a `task` event, like artifacts.
+//!
+//! A task the user adds goes to the lead bot first (`flow::plan`): it splits a job with parts others can do side by
+//! side into subtasks (`parent`) and coordinates them, assembling the result once they're all finished. A finished
+//! task is checked by another bot before it counts as done (`flow`: `checking`, `review_task`).
 
 use crate::LockExt;
 use crate::agent::bot::Cmd;
@@ -16,6 +20,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 pub mod dispatch;
+pub mod flow;
 pub mod git;
 pub mod tools;
 
@@ -29,6 +34,8 @@ const MAX_NOTES: usize = 50;
 const MAX_TASKS: usize = 500;
 /// Tasks one bot may hold at once, so one bot can't take the whole board.
 const MAX_CLAIMS: usize = 3;
+/// Times a checker may send a task back before a finish counts without another check.
+const MAX_SEND_BACKS: u8 = 2;
 
 /// Serializes every board change, so a claim reads and writes a task with no other change in between.
 #[derive(Default)]
@@ -38,12 +45,14 @@ pub struct Board {
     nudges: dispatch::Nudges,
 }
 
-/// Where a task stands (wire values: `open` / `claimed` / `review` / `done` / `cancelled`).
+/// Where a task stands (wire values: `open` / `claimed` / `checking` / `review` / `done` / `cancelled`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TaskStatus {
     Open,
     Claimed,
+    /// Finished, and another bot (`reviewer`) checks the result before it counts.
+    Checking,
     /// Finished on its own branch, waiting for the user to merge it.
     Review,
     Done,
@@ -57,6 +66,11 @@ impl TaskStatus {
 
     fn closed(self) -> bool {
         matches!(self, Self::Done | Self::Cancelled)
+    }
+
+    /// Still being worked on or checked: a parent waits for its subtasks to leave these.
+    fn unfinished(self) -> bool {
+        matches!(self, Self::Open | Self::Claimed | Self::Checking)
     }
 }
 
@@ -89,6 +103,15 @@ pub struct Task {
     pub notes: Vec<Note>,
     /// What the claimer reported when it finished.
     pub summary: Option<String>,
+    /// The task this one is a part of (a subtask), whose claimer assembles the parts.
+    #[serde(default)]
+    pub parent: Option<String>,
+    /// The bot that checks (or checked) the finished work.
+    #[serde(default)]
+    pub reviewer: Option<String>,
+    /// Times a checker sent it back.
+    #[serde(default)]
+    pub send_backs: u8,
     pub created_at: i64,
     pub updated_at: i64,
     #[serde(default)]
@@ -186,12 +209,33 @@ pub struct NewTask<'a> {
     pub title: &'a str,
     pub detail: &'a str,
     pub project: Option<&'a str>,
+    /// The task it is a part of.
+    pub parent: Option<&'a str>,
+}
+
+/// A task's subtasks, oldest first.
+pub fn children(store: &Store, id: &str) -> Vec<Task> {
+    let mut tasks: Vec<Task> = saved(store).filter(|t| !t.deleted && t.parent.as_deref() == Some(id)).collect();
+    tasks.sort_by_key(|t| t.created_at);
+    tasks
 }
 
 pub fn create(hub: &Hub, by: Actor<'_>, new: &NewTask<'_>) -> Result<Task> {
     let (title, detail, project) = (title(new.title)?, text(new.detail, "detail", MAX_DETAIL)?, project(new.project)?);
     let _g = hub.board.lock.locked();
     ensure!(saved(&hub.store).filter(|t| !t.deleted).count() < MAX_TASKS, "the board is full: delete closed tasks");
+    let parent = match new.parent.map(str::trim).filter(|p| !p.is_empty()) {
+        Some(id) => {
+            let parent = get(&hub.store, id)?;
+            ensure!(
+                !parent.status.closed(),
+                "the parent task is {}: a subtask needs an unfinished one",
+                wire(parent.status)
+            );
+            Some(parent.id)
+        }
+        None => None,
+    };
     let now = now_ms();
     let mut task = Task {
         id: uuid::Uuid::new_v4().to_string(),
@@ -205,6 +249,9 @@ pub fn create(hub: &Hub, by: Actor<'_>, new: &NewTask<'_>) -> Result<Task> {
         worktree: None,
         notes: vec![],
         summary: None,
+        parent,
+        reviewer: None,
+        send_backs: 0,
         created_at: now,
         updated_at: now,
         rev: 0,
@@ -226,21 +273,7 @@ fn change(hub: &Hub, id: &str, change: impl FnOnce(&mut Task) -> Result<()>) -> 
 /// Takes an open task for `bot`. The first claimer wins; a task in a git project then gets its worktree, made outside
 /// the lock (a slow disk mustn't hold the board). A worktree that can't be made gives the task back.
 pub async fn claim(hub: &Hub, id: &str, bot: &str) -> Result<Task> {
-    let task = change(hub, id, |task| {
-        match (&task.claimed_by, task.status) {
-            (Some(by), TaskStatus::Claimed) if by == bot => return Ok(()),
-            (_, TaskStatus::Open) => {}
-            (Some(by), TaskStatus::Claimed) => bail!("{} already claimed this task", hub.bot_name(by)),
-            (_, status) => bail!("this task is {}: only an open task can be claimed", wire(status)),
-        }
-        let held = saved(&hub.store)
-            .filter(|t| !t.deleted && t.status == TaskStatus::Claimed && t.claimed_by.as_deref() == Some(bot))
-            .count();
-        ensure!(held < MAX_CLAIMS, "you already hold {MAX_CLAIMS} tasks: finish or release one first");
-        task.status = TaskStatus::Claimed;
-        task.claimed_by = Some(bot.to_owned());
-        Ok(())
-    })?;
+    let task = take(hub, id, bot)?;
     if task.worktree.is_some() {
         return Ok(task);
     }
@@ -257,6 +290,25 @@ pub async fn claim(hub: &Hub, id: &str, bot: &str) -> Result<Task> {
             Err(error.context("making the task's worktree"))
         }
     }
+}
+
+/// Claims an open task for `bot`, with no worktree (the first claimer wins).
+fn take(hub: &Hub, id: &str, bot: &str) -> Result<Task> {
+    change(hub, id, |task| {
+        match (&task.claimed_by, task.status) {
+            (Some(by), TaskStatus::Claimed) if by == bot => return Ok(()),
+            (_, TaskStatus::Open) => {}
+            (Some(by), TaskStatus::Claimed) => bail!("{} already claimed this task", hub.bot_name(by)),
+            (_, status) => bail!("this task is {}: only an open task can be claimed", wire(status)),
+        }
+        let held = saved(&hub.store)
+            .filter(|t| !t.deleted && t.status == TaskStatus::Claimed && t.claimed_by.as_deref() == Some(bot))
+            .count();
+        ensure!(held < MAX_CLAIMS, "you already hold {MAX_CLAIMS} tasks: finish or release one first");
+        task.status = TaskStatus::Claimed;
+        task.claimed_by = Some(bot.to_owned());
+        Ok(())
+    })
 }
 
 /// The claimer, or the user, may change a claimed task.
@@ -283,13 +335,17 @@ pub fn note(hub: &Hub, id: &str, by: Actor<'_>, value: &str) -> Result<Task> {
     })
 }
 
-/// The claimer is done: a task with a branch waits for the user's merge (`review`), any other is `done`. Work left
-/// uncommitted in the worktree is refused, so the branch the user merges is the whole result.
+/// The claimer is done: another bot checks the work first (`checking`, `flow`), unless none can or it was sent back
+/// too often; then a task with a branch waits for the user's merge (`review`), any other is `done`. Work left
+/// uncommitted in the worktree is refused, so the branch the user merges is the whole result, and a task with
+/// unfinished subtasks can't finish.
 pub async fn finish(hub: &Hub, id: &str, bot: &str, summary: &str) -> Result<Task> {
     let summary = text(summary, "summary", MAX_DETAIL)?;
     ensure!(!summary.is_empty(), "summary is required: say what you did and how you checked it");
     let task = get(&hub.store, id)?;
     check_claimer(hub, &task, Actor::Bot(bot))?;
+    let open = children(&hub.store, &task.id).into_iter().filter(|t| t.status.unfinished()).count();
+    ensure!(open == 0, "{open} subtasks of this task aren't finished yet: you'll be told when they are");
     if let Some(tree) = &task.worktree {
         ensure!(
             git::clean(Path::new(tree)).await?,
@@ -297,13 +353,22 @@ pub async fn finish(hub: &Hub, id: &str, bot: &str, summary: &str) -> Result<Tas
             task.branch.as_deref().unwrap_or("the task's branch")
         );
     }
-    change(hub, id, |task| {
+    let checker = (task.send_backs < MAX_SEND_BACKS).then(|| flow::checker(hub, bot)).flatten();
+    let task = change(hub, id, |task| {
         ensure!(task.status == TaskStatus::Claimed, "only a claimed task can be finished");
         check_claimer(hub, task, Actor::Bot(bot))?;
-        task.status = if task.branch.is_some() { TaskStatus::Review } else { TaskStatus::Done };
         task.summary = Some(summary);
+        match &checker {
+            Some(reviewer) => {
+                task.status = TaskStatus::Checking;
+                task.reviewer = Some(reviewer.clone());
+            }
+            None => task.status = flow::settled(task),
+        }
         Ok(())
-    })
+    })?;
+    flow::after_finish(hub, &task);
+    Ok(task)
 }
 
 /// Gives a claimed task back to the board. The branch and worktree stay, so the next claimer carries on from them.
@@ -314,6 +379,7 @@ pub fn release(hub: &Hub, id: &str, by: Actor<'_>, reason: Option<&str>) -> Resu
         check_claimer(hub, task, by)?;
         task.status = TaskStatus::Open;
         task.claimed_by = None;
+        task.reviewer = None;
         if let Some(reason) = reason {
             task.notes.push(Note { by: by.id(), text: format!("Released: {reason}"), at: now_ms() });
         }
@@ -339,6 +405,7 @@ pub fn edit(hub: &Hub, id: &str, new_title: Option<&str>, detail: Option<&str>) 
 /// The user moves a task: reopen it (its claimer lets go), mark it done or cancel it. Closing removes its worktree;
 /// the branch stays, so no commit is lost.
 pub async fn set_status(hub: &Hub, id: &str, status: TaskStatus) -> Result<Task> {
+    let was = get(&hub.store, id)?.status;
     ensure!(
         matches!(status, TaskStatus::Open | TaskStatus::Done | TaskStatus::Cancelled),
         "a task can be set open, done or cancelled"
@@ -347,9 +414,11 @@ pub async fn set_status(hub: &Hub, id: &str, status: TaskStatus) -> Result<Task>
         task.status = status;
         if status == TaskStatus::Open {
             task.claimed_by = None;
+            task.reviewer = None;
         }
         Ok(())
     })?;
+    flow::after_close(hub, &task, was);
     if status.closed() { drop_worktree(hub, task).await } else { Ok(task) }
 }
 
@@ -400,10 +469,15 @@ pub async fn delete(hub: &Hub, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// The user hands an open task to a bot: it is claimed for the bot, which starts on it in its own chat.
+/// The user hands a task to a bot: it is claimed for the bot (taken from a bot holding it, such as the lead planning
+/// it), which starts on it in its own chat.
 pub async fn assign(hub: &Hub, id: &str, bot: &str) -> Result<Task> {
     let row =
         hub.store.bot(bot)?.filter(|r| !r.deleted && !r.config.is_group()).ok_or_else(|| anyhow!("unknown bot"))?;
+    let held = get(&hub.store, id)?;
+    if held.status == TaskStatus::Claimed && held.claimed_by.as_deref() != Some(row.config.id.as_str()) {
+        release(hub, id, Actor::User, None)?;
+    }
     let task = claim(hub, id, &row.config.id).await?;
     hub.send_cmd(&row.config.id, Cmd::Prompt { text: assigned_prompt(&task), call: None })?;
     Ok(task)
