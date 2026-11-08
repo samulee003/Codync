@@ -1869,5 +1869,13 @@
   "Connect to this computer to use its board": "连接到这台电脑才能使用它的任务板",
   "Several bots at once": "多个 bot 同时操作",
   "Bots use apps in the background with agent-desktop, so more than one can work at the same time.": "bot 通过 agent-desktop 在后台操作 App，可以同时有多个 bot 一起工作。",
-  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "尚未安装 agent-desktop，所以 bot 仍会轮流操作。安装命令：npm install -g agent-desktop"
+  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "尚未安装 agent-desktop，所以 bot 仍会轮流操作。安装命令：npm install -g agent-desktop",
+  "Split a goal into tasks": "把目标拆成任务",
+  "Your lead bot splits it into tasks, and the bots claim them.": "主控 bot 会把它拆成多个任务，再由各个 bot 认领。",
+  "The goal, e.g. prepare both kids’ exam review papers": "目标，例如：准备两个孩子的考试复习卷",
+  "Split into tasks": "拆成任务",
+  "{name} is splitting it into tasks.": "{name} 正在把它拆成任务。",
+  "Bots that claim tasks on their own": "主动领任务的 bot",
+  "Add a task with +, or split a whole goal into tasks with the wand.": "用 + 新建任务，或用魔杖把整个目标拆成任务。",
+  "Clear": "清除"
 }

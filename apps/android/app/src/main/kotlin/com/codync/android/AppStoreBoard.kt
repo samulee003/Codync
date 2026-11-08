@@ -18,9 +18,26 @@ internal fun AppStore.receiveTasks(events: List<MirrorEvent>) {
     if (tasks.isNotEmpty()) mutableState.update { state -> state.copy(tasks = tasks.fold(state.tasks) { board, task -> board.upsertTask(task) }) }
 }
 
+private fun optedOut(answer: JsonObject): Set<String>? =
+    answer["optedOut"]?.let { it as? JsonArray }?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }?.toSet()
+
 fun AppStore.loadBoard() = action("board") {
-    val tasks = ready().call("tasks").jsonObject.getValue("tasks").jsonArray.mapNotNull { runCatching { BoardTask.decode(it) }.getOrNull() }
-    mutableState.update { state -> state.copy(tasks = tasks.fold(state.tasks) { board, task -> board.upsertTask(task) }) }
+    val answer = ready().call("tasks").jsonObject
+    val tasks = answer.getValue("tasks").jsonArray.mapNotNull { runCatching { BoardTask.decode(it) }.getOrNull() }
+    mutableState.update { state ->
+        state.copy(tasks = tasks.fold(state.tasks) { board, task -> board.upsertTask(task) }, boardOptedOut = optedOut(answer) ?: emptySet())
+    }
+}
+
+fun AppStore.setBoardClaims(botId: String, on: Boolean) = action("board-claims:$botId") {
+    val answer = ready().call("setBoardClaims", buildJsonObject { put("botId", botId); put("on", on) }).jsonObject
+    mutableState.update { it.copy(boardOptedOut = optedOut(answer) ?: it.boardOptedOut) }
+}
+
+/** Hands the goal to the lead bot, which splits it into tasks; `handed` gets its name. */
+fun AppStore.splitGoal(goal: String, handed: (String) -> Unit) = action("split-goal") {
+    val answer = ready().call("splitGoal", body("goal" to goal)).jsonObject
+    handed(answer["name"]?.jsonPrimitive?.contentOrNull ?: "")
 }
 
 fun AppStore.createTask(title: String, detail: String, project: String?, onDone: () -> Unit) = action("create-task") {

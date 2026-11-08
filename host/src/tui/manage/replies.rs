@@ -94,7 +94,15 @@ impl App {
                 }
             }
             Reply::Library(bot) => self.library_loaded(&bot, v["items"].as_array().map_or(&[], Vec::as_slice)),
-            Reply::Board => self.board_loaded(&v),
+            Reply::Board => {
+                self.board_loaded(&v);
+                self.close_board_fields();
+            }
+            Reply::GoalSplit => {
+                self.close_board_fields();
+                let name = v["name"].as_str().unwrap_or("The lead bot");
+                self.flash(&format!("{name} is splitting it into tasks"));
+            }
             // Its `task` event brings the change.
             Reply::BoardChanged => {}
             Reply::Gear(backend) => {
@@ -269,13 +277,15 @@ impl App {
                     f.error = Some(e);
                 }
             }
-            Reply::FieldsSaved | Reply::SectionRenamed { .. } => match self.overlays.last_mut() {
-                Some(Overlay::Fields(f)) => {
-                    f.saving = false;
-                    f.error = Some(e);
+            Reply::FieldsSaved | Reply::SectionRenamed { .. } | Reply::GoalSplit | Reply::Board => {
+                match self.overlays.last_mut() {
+                    Some(Overlay::Fields(f)) => {
+                        f.saving = false;
+                        f.error = Some(e);
+                    }
+                    _ => self.flash(&e),
                 }
-                _ => self.flash(&e),
-            },
+            }
             Reply::Auth(backend) => {
                 for o in &mut self.overlays {
                     if let Overlay::Agent(a) = o

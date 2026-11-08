@@ -52,7 +52,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, b: &BoardSheet) {
         buf,
         inner,
         None,
-        "n new · ↵ more · c note · a assign · m merge · o reopen · d done · x cancel · X del · esc",
+        "n new · s split · p bots · ↵ more · c note · a assign · m merge · o/d/x reopen/done/cancel · X del",
     );
 }
 

@@ -1,5 +1,6 @@
-//! The team board's methods for the apps: `tasks`, `createTask`, `editTask`, `noteTask`, `assignTask`,
-//! `setTaskStatus`, `mergeTask` and `deleteTask`. Changes reach every client as `task` events.
+//! The team board's methods for the apps: `tasks` (with the bots turned off from claiming), `createTask`, `editTask`,
+//! `noteTask`, `assignTask`, `setTaskStatus`, `mergeTask`, `deleteTask`, `setBoardClaims` and `splitGoal`. Task
+//! changes reach every client as `task` events.
 
 use super::str_arg;
 use crate::board::{self, Actor, NewTask, TaskStatus};
@@ -11,7 +12,16 @@ use std::sync::Arc;
 
 pub(super) async fn call(hub: &Arc<Hub>, method: &str, b: Value) -> Result<ControlFlow<Value, Value>> {
     let task = match method {
-        "tasks" => return Ok(ControlFlow::Break(json!({"tasks": board::list(&hub.store)}))),
+        "tasks" => {
+            let out = board::dispatch::opted_out(&hub.store);
+            return Ok(ControlFlow::Break(json!({"tasks": board::list(&hub.store), "optedOut": out})));
+        }
+        // Whether a bot comes for open tasks on its own (on unless the user turns it off).
+        "setBoardClaims" => {
+            let out = board::dispatch::set_claims(hub, str_arg(&b, "botId")?, b["on"].as_bool().unwrap_or(true))?;
+            return Ok(ControlFlow::Break(json!({"optedOut": out})));
+        }
+        "splitGoal" => return Ok(ControlFlow::Break(board::dispatch::split_goal(hub, str_arg(&b, "goal")?)?)),
         "createTask" => {
             let new = NewTask {
                 title: str_arg(&b, "title")?,

@@ -4,10 +4,25 @@ import Foundation
 public extension HostClient {
     private struct TaskAnswer: Decodable { var task: BoardTask }
 
-    func tasks() async throws -> [BoardTask] {
-        struct Res: Decodable { var tasks: [BoardTask] }
+    /// The board, with the bots turned off from claiming tasks on their own (none from hosts before it).
+    func tasks() async throws -> (tasks: [BoardTask], optedOut: Set<String>) {
+        struct Res: Decodable { var tasks: [BoardTask]; var optedOut: [String]? }
         let res: Res = try await call("tasks")
-        return res.tasks
+        return (res.tasks, Set(res.optedOut ?? []))
+    }
+
+    func setBoardClaims(botId: String, on: Bool) async throws -> Set<String> {
+        struct Body: Encodable { var botId: String; var on: Bool }
+        struct Res: Decodable { var optedOut: [String] }
+        let res: Res = try await call("setBoardClaims", Body(botId: botId, on: on))
+        return Set(res.optedOut)
+    }
+
+    /// Hands the goal to the lead bot, which splits it into tasks; answers its name.
+    func splitGoal(_ goal: String) async throws -> String {
+        struct Res: Decodable { var name: String }
+        let res: Res = try await call("splitGoal", ["goal": goal])
+        return res.name
     }
 
     func createTask(title: String, detail: String, project: String?) async throws -> BoardTask {

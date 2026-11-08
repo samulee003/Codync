@@ -37,13 +37,20 @@ import com.codync.android.design.*
     AnalyticsOnAppear(AnalyticsEvent.ScreenViewed(AnalyticsScreen.Board))
     LaunchedEffect(online) { if (online) store.loadBoard() }
     var adding by remember { mutableStateOf(false) }
+    var splitting by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    val splittingNotice = tr("{name} is splitting it into tasks.")
     var expanded by remember { mutableStateOf<String?>(null) }
     val columns = boardColumns(state.tasks.values)
     Column(Modifier.fillMaxSize().background(Palette.background)) {
-        ModalHeader("Team board") { IconButton("New task", "plus") { adding = true } }
+        ModalHeader("Team board") {
+            IconButton("Split a goal into tasks", "wand.and.stars") { splitting = true }
+            IconButton("New task", "plus") { adding = true }
+        }
         CardForm {
             Text(tr("Tasks your bots split, claim and finish together"), style = Type.callout, color = Palette.secondary)
             state.error?.let { Text(tr(it), style = Type.caption, color = Palette.danger) }
+            notice?.let { Text(it, style = Type.caption, color = Palette.secondary) }
             when {
                 columns.isNotEmpty() -> for ((status, tasks) in columns) Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SectionHeading("${tr(status.title)} · ${tasks.size}", Modifier.padding(start = 2.dp))
@@ -52,12 +59,16 @@ import com.codync.android.design.*
                 "board" in state.busy -> Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) { Spinner(20.dp) }
                 else -> Column(Modifier.outlinedCard(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(tr("No tasks yet"), style = Type.callout.semibold, color = Palette.text)
-                    Text(tr("Add a task with +, or ask a bot to split a job into tasks."), style = Type.callout, color = Palette.secondary)
+                    Text(tr("Add a task with +, or split a whole goal into tasks with the wand."), style = Type.callout, color = Palette.secondary)
                 }
             }
+            BoardMembers(state, store)
         }
     }
-    CodyncSheet(adding, { adding = false }) { NewTaskSheet(store) { adding = false } }
+    CodyncSheet(adding, { adding = false }) { NewTaskSheet(state, store) { adding = false } }
+    CodyncSheet(splitting, { splitting = false }) {
+        SplitGoalSheet(store) { name -> splitting = false; notice = splittingNotice.replace("{name}", name) }
+    }
 }
 
 @Composable private fun TaskRow(task: BoardTask, state: AppState, store: AppStore, expanded: Boolean, toggle: () -> Unit) {
@@ -114,26 +125,5 @@ private fun menuItems(task: BoardTask, state: AppState, store: AppStore, assignT
             val text = note.trim()
             if (text.isNotEmpty()) store.noteTask(task, text) { note = "" }
         }))
-    }
-}
-
-/** A new task: its title, what to do, and the folder it's in (a git project gives each claim its own worktree). */
-@Composable private fun NewTaskSheet(store: AppStore, done: () -> Unit) {
-    var title by remember { mutableStateOf("") }
-    var detail by remember { mutableStateOf("") }
-    var project by remember { mutableStateOf("") }
-    val trimmed = title.trim()
-    Column(Modifier.fillMaxSize().background(Palette.background)) {
-        ModalHeader("New task") {
-            IconButton("Add task", "checkmark", enabled = trimmed.isNotEmpty()) { store.createTask(trimmed, detail, project.trim(), done) }
-        }
-        CardForm {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                FieldBox(title, { title = it }, tr("Task title"))
-                FieldBox(detail, { detail = it }, tr("What to do, and how to check it is done"), minLines = 3, maxLines = 8)
-                FieldBox(project, { project = it }, tr("Project folder (optional)"), style = Type.body.copy(fontFamily = FontFamily.Monospace),
-                    capitalize = false)
-            }
-        }
     }
 }

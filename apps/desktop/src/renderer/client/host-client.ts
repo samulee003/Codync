@@ -173,8 +173,18 @@ export class HostClient {
     return this.call('renameArtifact', { botId, artifactId, title })
   }
 
-  tasks(): Promise<{ tasks: BoardTask[] }> {
+  /** The board, with the bots turned off from claiming (`optedOut`; hosts before it leave it out). */
+  tasks(): Promise<{ tasks: BoardTask[]; optedOut?: string[] }> {
     return this.call('tasks')
+  }
+
+  setBoardClaims(botId: string, on: boolean): Promise<{ optedOut: string[] }> {
+    return this.call('setBoardClaims', { botId, on })
+  }
+
+  /** Hands the goal to the lead bot, which splits it into tasks; answers who got it. */
+  splitGoal(goal: string): Promise<{ botId: string; name: string }> {
+    return this.call('splitGoal', { goal })
   }
 
   createTask(title: string, detail: string, project: string | null): Promise<{ task: BoardTask }> {

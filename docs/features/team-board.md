@@ -23,6 +23,19 @@ summary.
 Claims run under the board's lock (`board::Board`), so the first claimer wins and a second gets "X already claimed this
 task". A computer keeps at most 500 live tasks.
 
+## Bots come for tasks on their own
+
+Like Agensh's workers, bots claim from the board without being assigned (`board/dispatch.rs`). Every 5 seconds, while
+the board has open tasks, each bot that takes part and is idle (not working, waiting on the user or failing) and holds
+fewer than 3 tasks gets a host-started turn in its own chat listing the open tasks (at most 10): claim one that fits with
+`claim_task`, do it and `finish_task`, or reply in one line that none fits. A bot hears again only when the set of open
+tasks changes, or after 30 minutes. Every bot takes part unless the user turns it off on the board
+(`setBoardClaims {botId, on}`, saved in kv `board.optedOut`; `tasks` answers `optedOut`).
+
+**Split a goal** (`splitGoal {goal}`): the goal goes to the lead bot (else the first bot) in a host-started turn that
+asks it to split the goal into self-contained tasks with `create_task` and not do the work itself; the bots then claim
+them. The answer names the bot (`{botId, name}`).
+
 ## Git worktrees
 
 When a task's project is the top of a git repository with a commit, `claim` runs
@@ -53,10 +66,10 @@ and a deleted task stays as a tombstone (`deleted: true`) so clients drop it. Ol
 
 | Client | Where | Actions |
 |---|---|---|
-| Desktop | `checklist` button in the sidebar header (and rail) → sheet (`views/board/`) | `+` new task, unfold a task for detail and notes, add a note, menu: assign to a bot, merge, reopen, mark done, cancel, delete |
-| iPhone | `checklist` toolbar button on the roster → sheet (`CodyncUI/Board/BoardView.swift`) | same |
-| Android | `checklist` button in the roster header → sheet (`BoardView.kt`) | same |
-| Terminal UI | `B` or the palette's *Team board* (`tui/manage/board.rs`) | `n` new, `↵` unfold, `c` note, `a` assign, `m` merge, `o` reopen, `d` done, `x` cancel, `X` delete |
+| Desktop | `checklist` button in the sidebar header (and rail) → sheet (`views/board/`) | `+` new task (folder from the workspace picker), wand: split a goal, unfold a task for detail and notes, add a note, menu: assign to a bot, merge, reopen, mark done, cancel, delete; a switch per bot for claiming on its own |
+| iPhone | `checklist` toolbar button on the roster → sheet (`CodyncUI/Board/`) | same |
+| Android | `checklist` button in the roster header → sheet (`BoardView.kt`, `BoardSheets.kt`) | same |
+| Terminal UI | `B` or the palette's *Team board* (`tui/manage/board.rs`) | `n` new (folder typed as a path), `s` split a goal, `p` bots that claim, `↵` unfold, `c` note, `a` assign, `m` merge, `o` reopen, `d` done, `x` cancel, `X` delete |
 
 The board button shows only for a computer whose host is 2.41.0 or newer. Analytics: `task_changed` (`action`, `by`)
 and the `board` screen ([analytics events](../reference/analytics-events.md)).

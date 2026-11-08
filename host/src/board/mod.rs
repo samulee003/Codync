@@ -15,6 +15,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::sync::Mutex;
 
+pub mod dispatch;
 pub mod git;
 pub mod tools;
 
@@ -33,6 +34,8 @@ const MAX_CLAIMS: usize = 3;
 #[derive(Default)]
 pub struct Board {
     lock: Mutex<()>,
+    /// What each bot was last told about the open tasks (`dispatch`).
+    nudges: dispatch::Nudges,
 }
 
 /// Where a task stands (wire values: `open` / `claimed` / `review` / `done` / `cancelled`).

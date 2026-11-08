@@ -67,6 +67,8 @@ pub enum Reply {
     Board,
     /// A board change; its `task` event updates the board.
     BoardChanged,
+    /// `splitGoal`: who splits it.
+    GoalSplit,
     /// What an agent brings on its own (`agentGear`), for its sign-in sheet.
     Gear(String),
     /// A routine's webhook URL and key: copied as a ready-to-run curl.
@@ -120,6 +122,8 @@ pub struct BoardSheet {
     pub tasks: Option<Vec<crate::board::Task>>,
     pub cursor: usize,
     pub expanded: Option<String>,
+    /// Bots turned off from claiming open tasks on their own (`tasks`'s `optedOut`).
+    pub opted_out: Vec<String>,
 }
 
 pub struct Library {
@@ -237,6 +241,10 @@ pub enum Submit {
     },
     NewTask,
     NoteTask(String),
+    /// A goal for the lead bot to split into tasks.
+    SplitGoal,
+    /// The bots in the choices, in order, and whether each claims tasks now: ↵ flips the chosen one.
+    BoardClaims(Vec<(String, bool)>),
     /// A task and the bots its choices name, in order.
     AssignTask {
         task: String,

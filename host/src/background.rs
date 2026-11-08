@@ -22,6 +22,7 @@ pub fn start(hub: &Arc<Hub>) -> JoinSet<()> {
     tokio::spawn(voice::refresh_loop(hub.clone()));
     tokio::spawn(crate::chat::calls::sweep_loop(hub.clone()));
     tokio::spawn(crate::dev_servers::scan_loop(hub.clone()));
+    tokio::spawn(crate::board::dispatch::dispatch_loop(hub.clone()));
     let mut agent_checks = JoinSet::new();
     agent_checks.spawn({
         let hub = hub.clone();

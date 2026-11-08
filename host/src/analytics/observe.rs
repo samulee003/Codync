@@ -172,9 +172,11 @@ fn call_event(method: &str, b: &Value, p: &mut Map<String, Value>) -> Option<Eve
             Event::ArtifactPublished
         }
         // The team board (`board`): what changed and who changed it, never a task's text.
-        "createTask" | "editTask" | "noteTask" | "assignTask" | "setTaskStatus" | "mergeTask" | "deleteTask" => {
+        "createTask" | "editTask" | "noteTask" | "assignTask" | "setTaskStatus" | "mergeTask" | "deleteTask"
+        | "splitGoal" => {
             let action = match method {
                 "setTaskStatus" => b["status"].as_str().filter(|s| matches!(*s, "open" | "done" | "cancelled")),
+                "splitGoal" => Some("split"),
                 other => other.strip_suffix("Task"),
             };
             p.insert("action".into(), action.unwrap_or("other").into());

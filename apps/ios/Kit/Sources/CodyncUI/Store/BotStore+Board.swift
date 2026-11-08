@@ -14,7 +14,18 @@ extension BotStore {
     }
 
     func loadBoard() async throws {
-        for task in try await withLink(replay: true, { try await $0.tasks() }) { upsertTask(task) }
+        let board = try await withLink(replay: true) { try await $0.tasks() }
+        for task in board.tasks { upsertTask(task) }
+        boardOptedOut = board.optedOut
+    }
+
+    func setBoardClaims(_ botId: String, on: Bool) async throws {
+        boardOptedOut = try await withLink { try await $0.setBoardClaims(botId: botId, on: on) }
+    }
+
+    /// Answers the name of the bot splitting it.
+    func splitGoal(_ goal: String) async throws -> String {
+        try await withLink { try await $0.splitGoal(goal) }
     }
 
     func createTask(title: String, detail: String, project: String?) async throws {

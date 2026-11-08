@@ -37,7 +37,7 @@ pub fn heading(status: TaskStatus) -> &'static str {
 impl App {
     pub fn open_board(&mut self) {
         self.sheet("tasks", json!({}), Reply::Board);
-        self.overlays.push(Overlay::Board(BoardSheet { tasks: None, cursor: 0, expanded: None }));
+        self.overlays.push(Overlay::Board(BoardSheet { tasks: None, cursor: 0, expanded: None, opted_out: vec![] }));
     }
 
     pub(in crate::tui) fn board_key(&mut self, mut b: BoardSheet, k: KeyEvent) -> Option<Overlay> {
@@ -49,6 +49,15 @@ impl App {
             (KeyCode::Down | KeyCode::Char('j'), _) => b.cursor = (b.cursor + 1).min(n.saturating_sub(1)),
             (KeyCode::Up | KeyCode::Char('k'), _) => b.cursor = b.cursor.saturating_sub(1),
             (KeyCode::Char('n'), _) => return self.push_over(b, new_task_fields()),
+            (KeyCode::Char('s'), _) => return self.push_over(b, split_fields()),
+            (KeyCode::Char('p'), _) => {
+                let claims = self.claim_choices(&b.opted_out);
+                if claims.is_empty() {
+                    self.flash("No bot to take part");
+                } else {
+                    return self.push_over(b, claims_fields(claims));
+                }
+            }
             (KeyCode::Enter, Some(t)) => b.expanded = (b.expanded.as_deref() != Some(t.id.as_str())).then_some(t.id),
             (KeyCode::Char('c'), Some(t)) => return self.push_over(b, note_fields(t.id)),
             (KeyCode::Char('a'), Some(t)) if t.status == TaskStatus::Open => {
@@ -94,17 +103,41 @@ impl App {
         None
     }
 
-    /// The `tasks` answer: shown on the open board.
+    /// This computer's bots by name, each with whether it claims tasks on its own.
+    fn claim_choices(&self, opted_out: &[String]) -> Vec<(String, String, bool)> {
+        let mut bots: Vec<(String, String, bool)> = self
+            .bots
+            .values()
+            .filter(|x| !x.group && !x.hidden)
+            .map(|x| (x.id.clone(), x.name.clone(), !opted_out.contains(&x.id)))
+            .collect();
+        bots.sort_by_key(|(_, name, _)| name.to_lowercase());
+        bots
+    }
+
+    /// Closes a Fields sheet the board opened, once its change is saved.
+    pub(in crate::tui) fn close_board_fields(&mut self) {
+        if matches!(self.overlays.last(), Some(Overlay::Fields(f)) if matches!(f.submit, Submit::SplitGoal | Submit::BoardClaims(_)))
+        {
+            self.overlays.pop();
+        }
+    }
+
+    /// The `tasks` (or `setBoardClaims`) answer: shown on the open board.
     pub(in crate::tui) fn board_loaded(&mut self, v: &Value) {
-        let tasks: Vec<Task> = v["tasks"]
+        let opted_out: Option<Vec<String>> = v.get("optedOut").and_then(|o| serde_json::from_value(o.clone()).ok());
+        let tasks: Option<Vec<Task>> = v["tasks"]
             .as_array()
-            .map(|a| a.iter().filter_map(|t| serde_json::from_value(t.clone()).ok()).collect())
-            .unwrap_or_default();
-        let tasks = sorted(tasks);
+            .map(|a| sorted(a.iter().filter_map(|t| serde_json::from_value(t.clone()).ok()).collect()));
         for o in &mut self.overlays {
             if let Overlay::Board(b) = o {
-                b.cursor = b.cursor.min(tasks.len().saturating_sub(1));
-                b.tasks = Some(tasks.clone());
+                if let Some(tasks) = &tasks {
+                    b.cursor = b.cursor.min(tasks.len().saturating_sub(1));
+                    b.tasks = Some(tasks.clone());
+                }
+                if let Some(out) = &opted_out {
+                    b.opted_out.clone_from(out);
+                }
             }
         }
     }
@@ -162,6 +195,20 @@ fn new_task_fields() -> Fields {
     fields("New task", note, inputs, vec![], Submit::NewTask)
 }
 
+fn split_fields() -> Fields {
+    let inputs = vec![input("goal", "Goal", true, true, "e.g. prepare both kids' exam review papers")];
+    let note = "Your lead bot splits it into tasks, and the bots claim them. ⇧↵ new line, ↵ hands it over.";
+    fields("Split a goal into tasks", note, inputs, vec![], Submit::SplitGoal)
+}
+
+/// ←→ picks a bot; ↵ turns its claiming on or off.
+fn claims_fields(bots: Vec<(String, String, bool)>) -> Fields {
+    let choices = bots.iter().map(|(_, name, on)| format!("{name}: {}", if *on { "claims" } else { "off" })).collect();
+    let note = "Bots that claim tasks on their own hear about open tasks while idle. ←→ picks a bot; ↵ switches it.";
+    let bots = bots.into_iter().map(|(id, _, on)| (id, on)).collect();
+    fields("Bots that claim tasks on their own", note, vec![], choices, Submit::BoardClaims(bots))
+}
+
 fn note_fields(task: String) -> Fields {
     let inputs = vec![input("text", "Note", true, true, "Add a note for the team")];
     fields("Add a note for the team", "", inputs, vec![], Submit::NoteTask(task))
@@ -192,7 +239,7 @@ mod tests {
     #[tokio::test]
     async fn the_board_sorts_by_status_and_follows_task_events() {
         let mut app = app();
-        app.overlays.push(Overlay::Board(BoardSheet { tasks: None, cursor: 0, expanded: None }));
+        app.overlays.push(Overlay::Board(BoardSheet { tasks: None, cursor: 0, expanded: None, opted_out: vec![] }));
         app.board_loaded(
             &json!({"tasks": [task("a", "done", 5, 5), task("b", "open", 1, 1), task("c", "open", 3, 3)]}),
         );
@@ -213,5 +260,26 @@ mod tests {
         gone["deleted"] = true.into();
         app.task_changed(&gone);
         assert_eq!(ids(&app), ["b", "a"]);
+    }
+
+    #[tokio::test]
+    async fn the_board_keeps_which_bots_claim_and_offers_each_one() {
+        let mut app = app();
+        app.on_msg(crate::tui::app::Msg::Event(json!({"type": "bot", "bot": {"id": "a", "name": "Ada"}})));
+        app.on_msg(crate::tui::app::Msg::Event(json!({"type": "bot", "bot": {"id": "b", "name": "Bo"}})));
+        app.overlays.push(Overlay::Board(BoardSheet { tasks: None, cursor: 0, expanded: None, opted_out: vec![] }));
+        app.board_loaded(&json!({"tasks": [], "optedOut": ["b"]}));
+        let Some(Overlay::Board(b)) = app.overlays.last() else { panic!("open") };
+        assert_eq!(b.opted_out, ["b"]);
+        let choices = app.claim_choices(&["b".to_owned()]);
+        assert_eq!(choices, [("a".to_owned(), "Ada".to_owned(), true), ("b".to_owned(), "Bo".to_owned(), false)]);
+        let fields = claims_fields(choices);
+        assert_eq!(fields.choices, ["Ada: claims", "Bo: off"]);
+        app.overlays.push(Overlay::Fields(Box::new(fields)));
+        app.board_loaded(&json!({"optedOut": []}));
+        app.close_board_fields();
+        let Some(Overlay::Board(b)) = app.overlays.last() else { panic!("the sheet closed, the board stays") };
+        assert!(b.opted_out.is_empty(), "a setBoardClaims answer carries no tasks: they stay");
+        assert!(b.tasks.is_some());
     }
 }

@@ -8,6 +8,8 @@ public struct BoardView: View {
     @Environment(BotStore.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var adding = false
+    @State private var splitting = false
+    @State private var notice: String?
     @State private var expanded: String?
     @State private var loaded = false
     @State private var error: String?
@@ -18,6 +20,7 @@ public struct BoardView: View {
         let columns = BoardTask.columns(model.tasks.values)
         VStack(spacing: 0) {
             ModalHeader("Team board") {
+                IconButton("Split a goal into tasks", systemImage: "wand.and.stars") { splitting = true }
                 IconButton("New task", systemImage: "plus") { adding = true }
             }
             CardForm {
@@ -25,6 +28,9 @@ public struct BoardView: View {
                     .font(.callout).foregroundStyle(Palette.secondary)
                 if let error {
                     Text(L10n.tr(error)).font(.caption).foregroundStyle(Palette.danger).textSelection(.enabled)
+                }
+                if let notice {
+                    Text(notice).font(.caption).foregroundStyle(Palette.secondary)
                 }
                 if !columns.isEmpty {
                     ForEach(columns) { column in
@@ -35,13 +41,14 @@ public struct BoardView: View {
                 } else if loaded {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(L10n.tr("No tasks yet")).font(.callout.weight(.semibold))
-                        Text(L10n.tr("Add a task with +, or ask a bot to split a job into tasks."))
+                        Text(L10n.tr("Add a task with +, or split a whole goal into tasks with the wand."))
                             .font(.callout).foregroundStyle(Palette.secondary)
                     }
                     .outlinedCard()
                 } else {
                     Spinner(size: 20).frame(maxWidth: .infinity).padding(.top, 40)
                 }
+                BoardMembers { self.error = $0 }
             }
         }
         .background(Palette.background)
@@ -56,6 +63,9 @@ public struct BoardView: View {
             loaded = true
         }
         .codyncSheet(isPresented: $adding) { NewTaskSheet() }
+        .codyncSheet(isPresented: $splitting) {
+            SplitGoalSheet { name in notice = L10n.tr("{name} is splitting it into tasks.").replacingOccurrences(of: "{name}", with: name) }
+        }
     }
 
     private func row(_ task: BoardTask) -> some View {
@@ -173,64 +183,6 @@ private struct TaskDetail: View {
             } catch {
                 failed(error.localizedDescription)
             }
-        }
-    }
-}
-
-/// A new task: its title, what to do, and the folder it's in (a git project gives each claim its own worktree).
-private struct NewTaskSheet: View {
-    @Environment(BotStore.self) private var model
-    @Environment(\.dismissModal) private var dismiss
-    @State private var title = ""
-    @State private var detail = ""
-    @State private var project = ""
-    @State private var saving = false
-    @State private var error: String?
-    @FocusState private var focused: Bool
-
-    private var trimmed: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ModalHeader("New task") {
-                if saving {
-                    Spinner()
-                } else {
-                    IconButton("Add task", systemImage: "checkmark", action: save).disabled(trimmed.isEmpty)
-                }
-            }
-            CardForm {
-                CardSection {
-                    TextField(L10n.tr("Task title"), text: $title).focused($focused)
-                    TextField(L10n.tr("What to do, and how to check it is done"), text: $detail, axis: .vertical).lineLimit(3...8)
-                    TextField(L10n.tr("Project folder (optional)"), text: $project)
-                        .font(.body.monospaced())
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                }
-                if let error {
-                    Text(L10n.tr(error)).font(.caption).foregroundStyle(Palette.danger).textSelection(.enabled)
-                }
-            }
-            .textFieldStyle(.plain)
-        }
-        .background(Palette.background)
-        .presentationDetents([.medium, .large])
-        .onAppear { focused = true }
-    }
-
-    private func save() {
-        guard !saving, !trimmed.isEmpty else { return }
-        saving = true
-        let folder = project.trimmingCharacters(in: .whitespacesAndNewlines)
-        Task {
-            do {
-                try await model.createTask(title: trimmed, detail: detail, project: folder.isEmpty ? nil : folder)
-                dismiss()
-            } catch {
-                self.error = error.localizedDescription
-            }
-            saving = false
         }
     }
 }

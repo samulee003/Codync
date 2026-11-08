@@ -1869,5 +1869,13 @@
   "Connect to this computer to use its board": "보드를 사용하려면 이 컴퓨터에 연결하세요",
   "Several bots at once": "여러 봇 동시 사용",
   "Bots use apps in the background with agent-desktop, so more than one can work at the same time.": "봇이 agent-desktop으로 앱을 백그라운드에서 다루므로 여러 봇이 동시에 작업할 수 있습니다.",
-  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "agent-desktop이 설치되지 않아 봇이 번갈아 사용합니다. 설치: npm install -g agent-desktop"
+  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "agent-desktop이 설치되지 않아 봇이 번갈아 사용합니다. 설치: npm install -g agent-desktop",
+  "Split a goal into tasks": "목표를 작업으로 나누기",
+  "Your lead bot splits it into tasks, and the bots claim them.": "리드 봇이 작업으로 나누고, 봇들이 맡아 갑니다.",
+  "The goal, e.g. prepare both kids’ exam review papers": "목표, 예: 두 아이의 시험 복습지 준비",
+  "Split into tasks": "작업으로 나누기",
+  "{name} is splitting it into tasks.": "{name}이(가) 작업으로 나누고 있습니다.",
+  "Bots that claim tasks on their own": "스스로 작업을 맡는 봇",
+  "Add a task with +, or split a whole goal into tasks with the wand.": "+로 작업을 추가하거나, 마법봉으로 목표 전체를 작업으로 나누세요.",
+  "Clear": "지우기"
 }

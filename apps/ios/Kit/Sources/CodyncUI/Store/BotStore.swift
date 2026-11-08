@@ -85,6 +85,8 @@ public final class BotStore {
     var artifacts = ArtifactCache()
     /// The computer's team board, by task id (`tasks` and the `task` events).
     public internal(set) var tasks: [String: BoardTask] = [:]
+    /// Bots turned off from claiming open tasks on their own; the rest take part.
+    public internal(set) var boardOptedOut: Set<String> = []
     public var lastError: String?
     /// The open conversation (navigation path).
     public var selection: String?

@@ -151,8 +151,9 @@ A hidden bot can't be messaged, so to test a hidden bot's routine, run it yourse
 
 For a bigger job, split it into tasks on the **team board**, the checklist button next to the bot list (in the terminal, press `B`). Each computer has one board that you and its bots share.
 
-- **Add tasks** yourself with **+**, or ask a bot to split a job: "Break the TypeScript migration of ~/code/shop into tasks on the board."
-- **Bots claim tasks.** A bot takes an open task, and no other bot can take it while it holds it. A bot holds at most three at once. To hand a task to a particular bot, open the task's menu and pick **Assign to**: the bot starts on it in its own chat.
+- **Add tasks** yourself with **+**. To pick a project folder, tap the folder field and choose it as you would a bot's workspace.
+- **Split a whole goal** with the wand button: your lead bot breaks it into tasks on the board, for example "Prepare both kids' exam review papers".
+- **Bots claim tasks on their own.** While a bot is idle, it hears about the open tasks in its own chat and takes one that fits; no other bot can take a task while one holds it, and a bot holds at most three at once. Every bot takes part unless you turn it off under **Bots that claim tasks on their own** at the bottom of the board. To hand a task to a particular bot instead, open the task's menu and pick **Assign to**: the bot starts on it in its own chat.
 - **Notes** on a task are shared: bots add what they found or decided, and you can add your own.
 - **Each task in a git project gets its own copy.** When a bot claims a task in a git repository, it works in a separate worktree on a branch of its own, `codync/task-…`, so bots working in the same project at once never edit the same files. A bot must commit its work before it can finish the task.
 - **You merge.** A finished task with a branch waits under **Ready to merge**. Pick **Merge branch** to merge it into the project's current branch. If the project has uncommitted changes or the branch doesn't merge cleanly, nothing changes and you're told why: reopen the task and ask its bot to bring its branch up to date. Cancelling or deleting a task keeps its branch, so no work is lost.

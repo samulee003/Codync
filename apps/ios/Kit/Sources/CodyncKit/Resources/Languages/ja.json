@@ -1869,5 +1869,13 @@
   "Connect to this computer to use its board": "ボードを使うにはこのコンピュータに接続してください",
   "Several bots at once": "複数のボットを同時に",
   "Bots use apps in the background with agent-desktop, so more than one can work at the same time.": "ボットは agent-desktop でアプリをバックグラウンド操作するため、複数のボットが同時に作業できます。",
-  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "agent-desktop がインストールされていないため、ボットは順番に操作します。インストール：npm install -g agent-desktop"
+  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "agent-desktop がインストールされていないため、ボットは順番に操作します。インストール：npm install -g agent-desktop",
+  "Split a goal into tasks": "目標をタスクに分割",
+  "Your lead bot splits it into tasks, and the bots claim them.": "リードボットがタスクに分け、各ボットが担当します。",
+  "The goal, e.g. prepare both kids’ exam review papers": "目標（例：二人の子どもの試験対策プリントを用意する）",
+  "Split into tasks": "タスクに分割",
+  "{name} is splitting it into tasks.": "{name} がタスクに分割しています。",
+  "Bots that claim tasks on their own": "自分からタスクを担当するボット",
+  "Add a task with +, or split a whole goal into tasks with the wand.": "+ でタスクを追加するか、ワンドで目標全体をタスクに分割します。",
+  "Clear": "クリア"
 }

@@ -8,6 +8,8 @@ import { trNow } from '../lib/l10n.ts'
  */
 export class Board {
   readonly byId = new Map<string, BoardTask>()
+  /** Bots the user turned off from claiming open tasks on their own; the rest take part. */
+  optedOut = new Set<string>()
   private changed: () => void
   constructor(changed: () => void) { this.changed = changed }
 
@@ -19,7 +21,20 @@ export class Board {
   }
 
   async load(client: HostClient | null) {
-    for (const task of (await connected(client).tasks()).tasks) this.upsert(task)
+    const { tasks, optedOut } = await connected(client).tasks()
+    for (const task of tasks) this.upsert(task)
+    this.optedOut = new Set(optedOut ?? [])
+    this.changed()
+  }
+
+  async setClaims(client: HostClient | null, botId: string, on: boolean) {
+    this.optedOut = new Set((await connected(client).setBoardClaims(botId, on)).optedOut)
+    this.changed()
+  }
+
+  /** Answers the name of the bot splitting it. */
+  async split(client: HostClient | null, goal: string): Promise<string> {
+    return (await connected(client).splitGoal(goal)).name
   }
 
   async create(client: HostClient | null, title: string, detail: string, project: string | null) {

@@ -102,6 +102,12 @@ impl App {
                 self.sheet("renameArtifact", body, Reply::FieldsSaved);
             }
             Submit::NewTask => self.sheet("createTask", Value::Object(values), Reply::FieldsSaved),
+            Submit::SplitGoal => self.sheet("splitGoal", json!({"goal": values["goal"]}), Reply::GoalSplit),
+            Submit::BoardClaims(bots) => {
+                if let Some((bot, on)) = bots.get(f.choice) {
+                    self.sheet("setBoardClaims", json!({"botId": bot, "on": !on}), Reply::Board);
+                }
+            }
             Submit::NoteTask(task) => {
                 self.sheet("noteTask", json!({"taskId": task, "text": values["text"]}), Reply::FieldsSaved);
             }

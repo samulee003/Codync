@@ -1869,5 +1869,13 @@
   "Connect to this computer to use its board": "Connettiti a questo computer per usarne la bacheca",
   "Several bots at once": "Più bot contemporaneamente",
   "Bots use apps in the background with agent-desktop, so more than one can work at the same time.": "I bot usano le app in background con agent-desktop, così più bot possono lavorare insieme.",
-  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "agent-desktop non è installato, quindi i bot lavorano ancora a turno. Installalo con: npm install -g agent-desktop"
+  "agent-desktop isn’t installed, so bots still take turns. Install it with: npm install -g agent-desktop": "agent-desktop non è installato, quindi i bot lavorano ancora a turno. Installalo con: npm install -g agent-desktop",
+  "Split a goal into tasks": "Dividi un obiettivo in attività",
+  "Your lead bot splits it into tasks, and the bots claim them.": "Il bot principale lo divide in attività, che i bot poi prendono.",
+  "The goal, e.g. prepare both kids’ exam review papers": "L’obiettivo, es. preparare le schede di ripasso per entrambi i bambini",
+  "Split into tasks": "Dividi in attività",
+  "{name} is splitting it into tasks.": "{name} lo sta dividendo in attività.",
+  "Bots that claim tasks on their own": "Bot che prendono attività da soli",
+  "Add a task with +, or split a whole goal into tasks with the wand.": "Aggiungi un’attività con + o dividi un intero obiettivo in attività con la bacchetta.",
+  "Clear": "Cancella"
 }

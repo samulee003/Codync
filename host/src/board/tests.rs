@@ -201,3 +201,38 @@ async fn bots_use_the_board_through_their_team_tools() {
     assert_eq!(open["tasks"].as_array().unwrap().len(), 0);
     assert!(tools::call(&hub, "ada", "finish_task", &json!({"taskId": id, "summary": "x"})).await.is_err());
 }
+
+#[tokio::test]
+async fn idle_bots_hear_about_open_tasks_once_unless_turned_off() {
+    let hub = hub();
+    dispatch::dispatch(&hub).unwrap();
+    assert!(hub.board.nudges.told.locked().is_empty(), "no open task: nobody hears");
+
+    dispatch::set_claims(&hub, "bo", false).unwrap();
+    let first = new_task(&hub, "Write the docs", None);
+    dispatch::dispatch(&hub).unwrap();
+    let heard = |hub: &Hub| hub.board.nudges.told.locked().keys().cloned().collect::<Vec<_>>();
+    assert_eq!(heard(&hub), ["ada"], "bo is turned off");
+    let at = hub.board.nudges.told.locked()["ada"].1;
+    dispatch::dispatch(&hub).unwrap();
+    assert_eq!(hub.board.nudges.told.locked()["ada"].1, at, "the same open tasks: not told again");
+
+    new_task(&hub, "Fix the build", None);
+    dispatch::dispatch(&hub).unwrap();
+    assert_eq!(hub.board.nudges.told.locked()["ada"].0.len(), 2, "new open tasks: told again");
+
+    claim(&hub, &first.id, "ada").await.unwrap();
+    assert_eq!(dispatch::opted_out(&hub.store).into_iter().collect::<Vec<_>>(), ["bo"]);
+    dispatch::set_claims(&hub, "bo", true).unwrap();
+    assert!(dispatch::opted_out(&hub.store).is_empty());
+    assert!(dispatch::set_claims(&hub, "nobody", false).is_err());
+}
+
+#[tokio::test]
+async fn a_goal_goes_to_the_lead_bot() {
+    let hub = hub();
+    assert!(dispatch::split_goal(&hub, "  ").is_err(), "an empty goal");
+    // No actor runs in tests, so handing it over fails after choosing the bot.
+    let error = dispatch::split_goal(&hub, "Prepare the exam papers").unwrap_err().to_string();
+    assert_eq!(error, "unknown bot");
+}

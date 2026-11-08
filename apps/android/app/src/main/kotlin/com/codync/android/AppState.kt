@@ -86,6 +86,8 @@ data class AppState(
     val library: Map<String, List<LibraryItem>> = emptyMap(),
     /** The computer's team board, by task id (`tasks` and the `task` events). */
     val tasks: Map<String, BoardTask> = emptyMap(),
+    /** Bots turned off from claiming open tasks on their own; the rest take part. */
+    val boardOptedOut: Set<String> = emptySet(),
     val plugins: PluginListing? = null,
     val voice: VoiceCallViewState? = null,
     /** The computer's remote screen (`null`: the host predates it). */
