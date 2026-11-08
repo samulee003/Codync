@@ -31,6 +31,22 @@ export interface Usage {
   providers: UsageProvider[]
   /** Absent from a host older than the chooser. */
   services?: UsageService[]
+  /** Each agent's tightest limit left, by every name a bot's `backend` may give it (`host/src/usage/stamina.rs`). */
+  stamina?: Record<string, Stamina>
+}
+
+/** How much of a bot's agent's plan is left: the bar beside the bot in the roster. */
+export interface Stamina {
+  /** Share of the tightest limit left, 0–100. */
+  left: number
+  label: string
+  resetsAt?: number | null
+  resetsText?: string | null
+}
+
+/** The bar's color: full, getting low, nearly out. */
+export function staminaLevel(left: number): 'full' | 'low' | 'out' {
+  return left >= 50 ? 'full' : left >= 20 ? 'low' : 'out'
 }
 
 export interface Backend {

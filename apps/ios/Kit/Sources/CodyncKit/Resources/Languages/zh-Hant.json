@@ -1877,5 +1877,6 @@
   "{name} is splitting it into tasks.": "{name} 正在把它拆成任務。",
   "Bots that claim tasks on their own": "主動領任務的 bot",
   "Add a task with +, or split a whole goal into tasks with the wand.": "用 + 新增任務，或用魔杖把整個目標拆成任務。",
-  "Clear": "清除"
+  "Clear": "清除",
+  "{percent}% left": "剩餘 {percent}%"
 }

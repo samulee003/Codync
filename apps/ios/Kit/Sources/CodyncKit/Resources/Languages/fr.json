@@ -1877,5 +1877,6 @@
   "{name} is splitting it into tasks.": "{name} le découpe en tâches.",
   "Bots that claim tasks on their own": "Bots qui prennent des tâches d’eux-mêmes",
   "Add a task with +, or split a whole goal into tasks with the wand.": "Ajoutez une tâche avec +, ou découpez tout un objectif en tâches avec la baguette.",
-  "Clear": "Effacer"
+  "Clear": "Effacer",
+  "{percent}% left": "{percent} % restant"
 }

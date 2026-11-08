@@ -56,6 +56,7 @@ import coil3.compose.AsyncImage
 import com.codync.android.core.Bot
 import com.codync.android.core.ComputerSelection
 import com.codync.android.core.LinkState
+import com.codync.android.core.Stamina
 import com.codync.android.core.hasBoard
 import com.codync.android.core.mixesAgents
 import com.codync.android.core.runningAgent
@@ -353,7 +354,11 @@ private fun Bot.movesWith(other: Bot) = band == other.band && (pinned || section
 @Composable internal fun BotRow(bot: Bot, state: AppState, agent: AgentMark? = null) {
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        AvatarWithStatus(bot, state.bots, 46.dp, agent)
+        // Stamina sits under the avatar like a game character's (iOS `BotRow`); a group has no agent of its own.
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            AvatarWithStatus(bot, state.bots, 46.dp, agent)
+            if (bot.kind != "group") Stamina.of(state.usage, bot.backend)?.let { StaminaBar(it, 37.dp) }
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {

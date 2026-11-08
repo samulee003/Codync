@@ -32,6 +32,7 @@ mod omp;
 mod opencode;
 mod reading;
 mod services;
+mod stamina;
 mod vibe;
 
 pub use claude::{ingest_claude_rate_limit, ingest_statusline};
@@ -68,6 +69,10 @@ pub struct Usage {
     pub providers: Vec<Provider>,
     /// The agents the user can choose among in the Usage screen.
     pub services: Vec<Service>,
+    /// Each agent's tightest limit left, for the stamina bar beside its bots (`stamina`), by every name a bot's
+    /// `backend` may give it. Filled in what the apps get ([`Usage::visible`]), from every reading, hidden or not.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub stamina: std::collections::BTreeMap<String, stamina::Stamina>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -122,7 +127,8 @@ impl Usage {
         let mut providers: Vec<Provider> =
             self.providers.iter().filter(|provider| !hidden(provider.id)).cloned().collect();
         providers.sort_by_key(|provider| rank(provider.id));
-        Self { providers, services: self.services.clone() }
+        // A bot's bar shows even when the user hides its agent from the Usage screens.
+        Self { providers, services: self.services.clone(), stamina: stamina::of(&self.providers) }
     }
 
     /// One window at a time, for Claude's status line and rate-limit events.
@@ -297,12 +303,14 @@ mod tests {
                 Service { id: "claude", name: "Claude", registry: None, shown: true },
                 Service { id: "cursor", name: "Cursor", registry: None, shown: false },
             ],
+            ..Usage::default()
         };
         let visible = usage.visible();
         let ids: Vec<_> = visible.providers.iter().map(|p| p.id).collect();
         // A reading with no row yet (a status line before the first sync) isn't lost.
         assert_eq!(ids, ["claude", "codex"]);
         assert_eq!(visible.services.len(), 2, "the chooser still lists the hidden one");
+        assert_eq!(visible.stamina["cursor"].left, 90, "a hidden agent's bots still show their stamina");
     }
 
     #[test]

@@ -1877,5 +1877,6 @@
   "{name} is splitting it into tasks.": "{name}이(가) 작업으로 나누고 있습니다.",
   "Bots that claim tasks on their own": "스스로 작업을 맡는 봇",
   "Add a task with +, or split a whole goal into tasks with the wand.": "+로 작업을 추가하거나, 마법봉으로 목표 전체를 작업으로 나누세요.",
-  "Clear": "지우기"
+  "Clear": "지우기",
+  "{percent}% left": "{percent}% 남음"
 }

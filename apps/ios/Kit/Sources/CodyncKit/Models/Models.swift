@@ -96,10 +96,28 @@ public struct Usage: Codable, Hashable, Sendable {
     public var providers: [UsageProvider]
     /// The agents the Usage screen can show or hide. Absent from a host older than the chooser.
     public var services: [UsageService]?
-    public init(providers: [UsageProvider] = [], services: [UsageService]? = nil) {
+    /// Each agent's tightest limit left, by every name a bot's `backend` may give it (`host/src/usage/stamina.rs`).
+    /// Absent from a host before it.
+    public var stamina: [String: Stamina]?
+    public init(providers: [UsageProvider] = [], services: [UsageService]? = nil, stamina: [String: Stamina]? = nil) {
         self.providers = providers
         self.services = services
+        self.stamina = stamina
     }
+}
+
+/// How much of a bot's agent's plan is left: the game-style bar under the bot's avatar in the roster.
+public struct Stamina: Codable, Hashable, Sendable {
+    /// Share of the tightest limit left, 0–100.
+    public var left: Int
+    public var label: String
+    public var resetsAt: Int64?
+    public var resetsText: String?
+
+    public enum Level: Sendable { case full, low, out }
+
+    /// The bar's color: full, under half, nearly out.
+    public var level: Level { left >= 50 ? .full : left >= 20 ? .low : .out }
 }
 
 /// An agent the Usage screen can show or hide. The host keeps the choice, so every app follows it.
