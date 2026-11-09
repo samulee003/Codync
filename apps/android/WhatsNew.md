@@ -7,15 +7,36 @@ released version's section; a version without one gets the PRs' "What's New: And
 else a generic "Bug fixes and improvements" line. Delete old sections.
 -->
 
-## 2.41.0
+## 2.42.1
 ### zh-Hant
+- bot 詳情「智慧體」區塊的「壓縮對話」預設改為「自動」：交給 Claude Code 或 Codex 在對話快滿時自己壓縮。想讓 Codync 提早壓縮，可以改選提早、接近上限或指定數量（從 100K、200K… 裡挑，或自己輸入）。已經是「提早」的 bot 會保留原設定，想交給智慧體自己壓縮可以改選「自動」。
 - 新增團隊任務板：在 bot 列表點清單按鈕，就能新增任務、指派給 bot，並查看 bot 認領、記錄和完成的進度。git 專案裡的任務會各自用獨立的分支工作，完成後可以直接在任務板上合併。
 - 主帥 bot 會把大任務拆成子任務分給其他 bot 同時進行，完成後由另一個 bot 審查。
 - 電腦上有多個 bot 同時操作時，每一個都會顯示正在使用電腦的標記。
+
 ### en-US
-- New team board: tap the checklist button on the bot list to add tasks, assign them to bots, and follow as bots claim, note and finish them. Tasks in a git project each work on their own branch, which you merge right from the board.
-- Your lead bot splits a big task into subtasks for the others to work on at once, and another bot checks each finished task.
-- Every bot that is using the computer at the same time now shows the in-use marker, not just one.
+- Summarize long chats, in a bot's Agent section, now defaults to Auto: Claude Code or Codex summarizes a chat on its own once it fills up. Pick Early, Near the limit or a size (100K, 200K and so on, or one you type) to have Codync summarize sooner. Bots already on Early keep it; pick Auto to leave it to the agent.
+- New team board (checklist button): your lead bot splits big tasks for bots to share, and another bot checks each one.
+
+## 2.42.0
+### zh-Hant
+- bot 詳情的「智慧體」區塊新增「壓縮對話」：選擇 Codync 什麼時候把長對話壓縮成摘要。可以選提早（預設）、接近上限、不主動壓縮，或指定數量：從 100K、200K… 裡挑，或自己輸入，最多到模型裝得下的上限。適用於 Claude Code 和 Codex 的 bot。
+
+### en-US
+- New Summarize long chats setting in a bot's Agent section: choose when Codync summarizes a long chat. Pick Early (default), Near the limit, Only when full, or a size: 100K, 200K and so on, or one you type, up to what the model holds. For Claude Code and Codex bots.
+
+## 2.41.0
+### zh-Hant
+- 不登入也能用了：在歡迎畫面選擇「不登入繼續」，手機掃電腦的 QR 碼就能配對，透過 Wi-Fi 或 Tailscale 連線。之後登入，配對會留在手機上；到「管理電腦」按「加入帳號」，電腦確認後就能從任何地方連線。
+- 電腦可以不加入帳號。配對時電腦會詢問；不加入的話，手機只能用 Wi-Fi 或 Tailscale 連線，之後也能在「管理電腦」加入帳號。
+- 遠端畫面會照連線設定換路：自動是先直連再走 Cloudflare，Cloudflare 優先則相反。
+- 群組裡輸入 @ 會列出成員，一排一個，和 / 指令選單一樣。
+
+### en-US
+- No account needed: choose Continue without an account, then scan your computer's QR code to connect over Wi-Fi or Tailscale. Sign in later and your computers stay paired.
+- A computer can stay out of your account: it asks when you pair, and Manage computers can add it later.
+- Remote screen now follows the Connection setting: Auto tries direct first, then Cloudflare, and Cloudflare first does the reverse.
+- Typing @ in a group lists its members one per row, like the / command list.
 
 ## 2.40.2
 ### zh-Hant

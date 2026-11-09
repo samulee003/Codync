@@ -21,10 +21,13 @@ pub mod reported;
 mod session;
 mod turns;
 
-pub use lifecycle::{KV_STARTED, Via, device_paired, host_started, phone_connected};
+pub use lifecycle::{
+    DiscoveryStage, KV_STARTED, PairedAccount, Via, device_paired, discovery_failed, host_started,
+    join_from_phone_answered, phone_connected,
+};
 pub use observe::{answered, failed, observe_call};
 pub use reported::track;
-pub use turns::{Steer, TurnOutcome, TurnSource, agent_fell_back, message_steered, turn_finished};
+pub use turns::{Steer, TurnOutcome, TurnSource, agent_fell_back, context_compacted, message_steered, turn_finished};
 
 const KV_ENABLED: &str = "analytics_enabled";
 /// The account the install id was merged into. An id merges into one account and a second is
@@ -72,6 +75,8 @@ pub enum Event {
     TurnFinished,
     /// A turn moved on to the bot's next agent (`agent::fallback`).
     AgentFellBack,
+    /// Codync started summarizing a bot's chat (`agent::bot::compaction`).
+    ContextCompacted,
     UsageReadFailed,
     SessionReset,
     PermissionAnswered,
@@ -117,6 +122,12 @@ pub enum Event {
     SettingChanged,
     /// The desktop app's ask before Reach from anywhere turns on for a computer in no account.
     ReachAccountAnswered,
+    ContinuedWithoutAccount,
+    JoinOfferAnswered,
+    /// A paired phone asked to add this computer to its account, and the computer answered.
+    JoinFromPhoneAnswered,
+    /// Advertising on the local network failed, so a computer in no account can't be found at a new address.
+    DiscoveryFailed,
     HostUpdateInstalled,
     /// `networkCreate` or `networkJoin`: this computer is in a network of the user's computers.
     NetworkJoined,
@@ -158,6 +169,7 @@ impl Event {
             Self::TurnStopped => "turn_stopped",
             Self::TurnFinished => "turn_finished",
             Self::AgentFellBack => "agent_fell_back",
+            Self::ContextCompacted => "context_compacted",
             Self::UsageReadFailed => "usage_read_failed",
             Self::SessionReset => "session_reset",
             Self::PermissionAnswered => "permission_answered",
@@ -194,6 +206,10 @@ impl Event {
             Self::AgentSignedIn => "agent_signed_in",
             Self::SettingChanged => "setting_changed",
             Self::ReachAccountAnswered => "reach_account_answered",
+            Self::ContinuedWithoutAccount => "continued_without_account",
+            Self::JoinOfferAnswered => "join_offer_answered",
+            Self::JoinFromPhoneAnswered => "join_from_phone_answered",
+            Self::DiscoveryFailed => "discovery_failed",
             Self::HostUpdateInstalled => "host_update_installed",
             Self::NetworkJoined => "network_joined",
             Self::NetworkChanged => "network_changed",

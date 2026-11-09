@@ -280,8 +280,8 @@ public struct Hello: Codable, Sendable {
     public var canUpdate: Bool?
     /// The latest release the computer found; nil while unknown (development builds, older hosts).
     public var latestVersion: String?
-    /// This phone paired without the computer joining its account: it calls `joinAccount` to finish (older hosts: nil).
-    public var joinAccount: Bool?
+    /// The computer could join an account: a signed-in phone may offer to add it (`HostClient.joinAccount`).
+    public var canJoinAccount: Bool?
 }
 
 public struct RecentWorkspace: Codable, Sendable, Identifiable {
@@ -364,6 +364,8 @@ public struct BotDraft: Codable, Hashable, Sendable {
     public var sharedMemory: Bool?
     /// Only sent when the user changes it.
     public var harnessMemory: Bool?
+    /// Nil where the host offers no setting (a new bot, an agent it can't ask), so it isn't sent.
+    public var compaction: CompactionThreshold?
 
     public init(name: String = "", description: String = "", avatarColor: String = AvatarPalette.colors.randomElement()!.id,
                 avatarShape: String = AvatarPalette.shapes.randomElement()!, backend: String = "claude", cwd: String = "",
@@ -403,6 +405,7 @@ public struct BotDraft: Codable, Hashable, Sendable {
         manageTeam = bot.manageTeam
         offeredToNetwork = bot.offeredToNetwork
         reachableByAssistants = bot.reachableByAssistants
+        compaction = bot.compaction
     }
 
     /// This draft with each field it hasn't changed from `base` (the bot as the form loaded it) taken from `fresh`
@@ -418,6 +421,7 @@ public struct BotDraft: Codable, Hashable, Sendable {
         follow(\.fastMode); follow(\.fallbacks); follow(\.selfFallbacks); follow(\.pinned); follow(\.hidden)
         follow(\.notify); follow(\.connectors); follow(\.skills); follow(\.computer); follow(\.manageTeam)
         follow(\.sharedMemory); follow(\.harnessMemory); follow(\.offeredToNetwork); follow(\.reachableByAssistants)
+        follow(\.compaction)
         return draft
     }
 }

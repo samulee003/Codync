@@ -184,6 +184,7 @@ pub enum Field {
     SelfFallbacks,
     Folder,
     Approvals,
+    Compaction,
     Notify,
     Computer,
     Team,
@@ -195,7 +196,7 @@ pub enum Field {
     Skills,
 }
 
-pub const FIELDS: [Field; 19] = [
+pub const FIELDS: [Field; 20] = [
     Field::Name,
     Field::Instructions,
     Field::Agent,
@@ -204,6 +205,7 @@ pub const FIELDS: [Field; 19] = [
     Field::Fast,
     Field::Fallbacks,
     Field::SelfFallbacks,
+    Field::Compaction,
     Field::Folder,
     Field::Approvals,
     Field::Notify,
@@ -247,6 +249,12 @@ pub struct Form {
     /// `None`: the host has no per-bot network switches.
     pub offered_to_network: Option<bool>,
     pub reachable_by_assistants: Option<bool>,
+    /// `None`: Codync doesn't summarize this agent's chats.
+    pub compaction: Option<codync_mem::compaction::Threshold>,
+    /// `None` until the agent has told its window.
+    pub compaction_sizes: Option<codync_mem::compaction::Sizes>,
+    /// The digits of a size being typed, in thousands of tokens.
+    pub compaction_typed: String,
     pub color: usize,
     pub shape: usize,
     pub connectors: Vec<Toggle>,
@@ -316,8 +324,13 @@ pub struct GroupForm {
 /// The pair-a-phone sheet's code: on its way, shown (its pairing link, and the short code to type when the
 /// Codync cloud holds one), or why none came.
 pub enum PairCode {
+    /// Opened for a phone asking: only the question shows, and no code is issued, which would wake the relay.
+    QuestionOnly,
     Loading,
-    Ready { url: String, short_code: Option<String> },
+    Ready {
+        url: String,
+        short_code: Option<String>,
+    },
     Failed(String),
 }
 

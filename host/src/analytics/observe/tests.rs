@@ -1,5 +1,5 @@
 use super::*;
-use crate::store::{Device, DeviceSource, Store};
+use crate::store::{Device, DeviceAccount, DeviceSource, Store};
 use serde_json::json;
 
 fn temp_hub() -> (std::sync::Arc<Hub>, std::path::PathBuf) {
@@ -262,6 +262,15 @@ async fn store_lookups_add_fields_choice_and_platform() {
     hub.store.save_bot(&cfg).unwrap();
     let (_, p) = observe_call(&hub, &Caller::Local, "updateBot", &json!({"id": "b1", "permission": "auto"})).unwrap();
     assert_eq!(p["fields"], json!(["permission"]));
+    assert!(p.get("compaction").is_none());
+    let (_, p) = observe_call(&hub, &Caller::Local, "updateBot", &json!({"id": "b1", "compaction": 120_000})).unwrap();
+    assert_eq!((&p["fields"], &p["compaction"]), (&json!(["compaction"]), &json!("tokens")), "the kind, not the size");
+    // The apps send the whole form: an unchanged threshold in it isn't a pick.
+    let (_, p) =
+        observe_call(&hub, &Caller::Local, "updateBot", &json!({"id": "b1", "name": "c", "compaction": "off"}))
+            .unwrap();
+    assert_eq!(p["fields"], json!(["name"]));
+    assert!(p.get("compaction").is_none());
 
     let card = json!({"status": "pending", "options": [{"optionId": "o1", "name": "Allow", "kind": "allow_always"}]});
     let e =
@@ -280,7 +289,7 @@ async fn store_lookups_add_fields_choice_and_platform() {
             lease_until: None,
             created_at: 0,
             last_seen_at: None,
-            account: None,
+            account: DeviceAccount::Unrecorded,
         })
         .unwrap();
     let (event, p) = observe_call(&hub, &phone, "respondPermission", &answer).unwrap();

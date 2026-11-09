@@ -4,7 +4,8 @@ import { isSSHConnecting, showsChat as shouldShowChat } from '@shared/ssh-startu
 import { draftOf, type Bot, type BotDraft } from '@shared/models'
 import { CharacterAvatar } from '../components/Avatar'
 import { Button, IconButton, ResizeHandle } from '../components/Controls'
-import { AnchoredMenu, Dialog, ModalHeader, Sheet, type MenuItem } from '../components/Overlay'
+import { Dialog, ModalHeader, Sheet } from '../components/Overlay'
+import { AnchoredMenu, type MenuItem } from '../components/Menu'
 import { HStack, Spacer } from '../components/Stack'
 import { Text } from '../components/Text'
 import { useModels } from '../lib/observable'
@@ -38,12 +39,13 @@ import { StartupRecovery } from './StartupRecovery'
 export { EmptyState } from './HostStateView'
 import { RefreshIndicator } from './RefreshIndicator'
 import { StarPrompt } from './StarPrompt'
+import { JoinAccountPrompt } from './JoinAccountPrompt'
 import { MoveComputerPrompt } from './MoveComputerPrompt'
 import { PairingRequestPrompt } from './PairingRequestPrompt'
 import { DeleteAccountPrompt } from './DeleteAccountPrompt'
 import { OpenVoiceSettings } from './call/CallView'
 import { AccountPanelLayer, ProfileAvatar } from './PanelMenus'
-import { DesktopActionMenu, type ActionItem } from './DesktopActionMenu'
+import { DesktopActionMenu } from './DesktopActionMenu'
 import { moveToSectionItems, sectionHeaderItems, type SectionNaming } from './section-menus'
 import { makeLeadItems, offersDelete, voiceTarget } from './lead-menus'
 import { SectionNameDialog } from './SectionNameDialog'
@@ -129,7 +131,7 @@ export function ChatWindow() {
       <RefreshIndicator />
       {!welcome.shown ? (
         accessSetup === null ? (
-          <AccessOnboarding onContinue={(ready) => finishAccess(ready, true)} />
+          <AccessOnboarding onContinue={(ready) => finishAccess(ready, true)} onBack={welcome.back} />
         ) : showsChat ? (
           <ChatSplitView />
         ) : (
@@ -139,7 +141,7 @@ export function ChatWindow() {
         <AccountWelcomeView onContinue={welcome.finish} />
       )}
       {!welcome.shown && accessSetup !== null && showsChat ? null : <div className="window-drag drag" />}
-      {!welcome.shown && accessSetup !== null ? <><StarPrompt /><MoveComputerPrompt /><DeleteAccountPrompt /></> : null}
+      {!welcome.shown && accessSetup !== null ? <><StarPrompt /><MoveComputerPrompt /><JoinAccountPrompt /><DeleteAccountPrompt /></> : null}
       <Sheet open={showAccess} onClose={() => setShowAccess(false)} width={660} height={Math.min(820, window.innerHeight - 80)}>
         <ModalHeader icon="hand.raised" title={tr(`Computer access`)} />
         <ComputerAccessView onContinue={(ready) => { finishAccess(ready, false); setShowAccess(false) }} />
@@ -206,7 +208,7 @@ function ChatSplitView() {
   const [importing, setImporting] = useState(false)
   const [newMenu, setNewMenu] = useState(false)
   const [railNewMenu, setRailNewMenu] = useState(false)
-  const [context, setContext] = useState<{ items: ActionItem[]; x: number; y: number } | null>(null)
+  const [context, setContext] = useState<{ items: MenuItem[]; x: number; y: number } | null>(null)
   const [naming, setNaming] = useState<SectionNaming | null>(null)
   const [editing, setEditing] = useState<EditTarget | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<BotTarget | null>(null)
@@ -300,7 +302,7 @@ function ChatSplitView() {
   const board = useBoardSheet(app, selectedStore, onlineStores, { width: windowSize.width, height: sheetHeight })
 
   // One plain list. The lead stays in sight: no hide.
-  const botActions = (bot: Bot, store: BotStore): ActionItem[] => [
+  const botActions = (bot: Bot, store: BotStore): MenuItem[] => [
     { title: bot.pinned ? 'Unpin' : 'Pin', icon: 'pin', action: () => store.setPinned(bot, !bot.pinned) },
     ...moveToSectionItems(bot, store, setNaming),
     { title: 'Mark as Read', icon: 'bell.badge', action: () => store.markAllRead(bot.id) },
@@ -418,14 +420,14 @@ function ChatSplitView() {
             <AnchoredMenu open={railNewMenu} onClose={() => setRailNewMenu(false)} anchor={railNewButton} items={newItems} />
             <IconButton title="Extensions" icon="square.grid.2x2" size={36} onClick={openMarketplace} />
             <UpdateBadge size={32} />
-            <RailAccountNotice onComputers={() => setSettings('computers')} />
+            <RailAccountNotice />
             <button className={`rail-profile ${showAccount ? 'open' : ''}`} aria-label="Open account menu for Account" title="Account" onClick={() => setShowAccount((s) => !s)}>
               <ProfileAvatar />
             </button>
           </div>
         ) : (
           // With several computers each heading opens its own Extensions instead.
-          <SidebarFooter accountOpen={showAccount} onAccount={() => setShowAccount((s) => !s)} onExtensions={roster.grouped ? undefined : openMarketplace} onComputers={() => setSettings('computers')} />
+          <SidebarFooter accountOpen={showAccount} onAccount={() => setShowAccount((s) => !s)} onExtensions={roster.grouped ? undefined : openMarketplace} />
         )}
       </aside>
       <ResizeHandle label={tr('Resize sidebar')} width={width} min={76} max={sidebarMax} edge="trailing" onResize={resizeSidebar} onDragging={setResizing} />
