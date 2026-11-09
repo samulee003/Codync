@@ -10,7 +10,7 @@ on:
       release_tag:
         description: 'Release Tag name (if publishing release)'
         type: string
-        default: 'v2.41.0-custom'
+        default: 'v2.42.1-custom'
   push:
     tags:
       - 'v*'
