@@ -1,0 +1,93 @@
+name: Sync upstream
+
+# Each day, when the official repository (leepokai/Codync) has a release (`v*` tag) this fork doesn't have yet, opens
+# a pull request that merges it into the target branch. A clean merge comes as a ready merge commit; a merge with
+# conflicts comes as the release itself, so GitHub shows the conflicting files and they are resolved in the PR.
+#
+# Pushing a release that changes workflow files needs a token with the `workflow` scope: add a fine-grained personal
+# access token (Contents, Pull requests and Workflows: read and write on this repository) as the secret SYNC_TOKEN.
+# Without it the job uses GITHUB_TOKEN, which can't push workflow changes, and its pull requests start no CI.
+
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Branch the official release merges into'
+        type: string
+        default: 'main'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency: sync-upstream
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      UPSTREAM: leepokai/Codync
+      TARGET: ${{ inputs.target || 'main' }}
+      GH_TOKEN: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target || 'main' }}
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Open a pull request for a new official release
+        run: |
+          set -euo pipefail
+          git remote add upstream "https://github.com/$UPSTREAM.git"
+          # Under a namespace of their own, so the fork's tags (such as v2.41.0-custom) stay as they are.
+          git fetch --quiet --no-tags upstream '+refs/tags/v*:refs/upstream-tags/v*'
+          TAG=$(git for-each-ref --format='%(refname:strip=2)' 'refs/upstream-tags/v*' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
+          if [ -z "$TAG" ]; then
+            echo "The official repository has no release."
+            exit 0
+          fi
+          REF="refs/upstream-tags/$TAG"
+          if git merge-base --is-ancestor "$REF" HEAD; then
+            echo "$TARGET already has $TAG."
+            exit 0
+          fi
+          BRANCH="sync/upstream-$TAG"
+          if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq length)" != "0" ]; then
+            echo "A pull request for $TAG is already open."
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
+          COMMITS=$(git rev-list --count "HEAD..$REF")
+          git checkout -B "$BRANCH"
+          if git merge --no-ff --no-edit -m "chore: sync upstream $TAG" "$REF"; then
+            CONFLICTS=""
+          else
+            CONFLICTS=$(git diff --name-only --diff-filter=U)
+            git merge --abort
+            # The release itself: GitHub shows the conflicts against the target, to resolve in the pull request.
+            git checkout -B "$BRANCH" "$REF"
+          fi
+          git push --force origin "$BRANCH"
+
+          {
+            echo "The official repository released [$TAG](https://github.com/$UPSTREAM/releases/tag/$TAG): $COMMITS commits that \`$TARGET\` doesn't have yet."
+            echo
+            if [ -z "$CONFLICTS" ]; then
+              echo "It merges cleanly: this branch holds the merge commit. Check CI, then merge."
+            else
+              echo "It conflicts with this fork's changes in these files, to resolve before merging:"
+              echo
+              echo "$CONFLICTS" | sed 's/^/- `/; s/$/`/'
+              echo
+              echo "This branch holds the release itself; resolve the conflicts in this pull request (or ask Claude to)."
+            fi
+            echo
+            echo "Opened by the *Sync upstream* workflow."
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create --base "$TARGET" --head "$BRANCH" --title "chore: sync upstream $TAG" --body-file "$RUNNER_TEMP/body.md"
