@@ -355,3 +355,10 @@ async fn a_tired_bot_is_left_out_of_board_work() {
     assert_eq!(done.status, TaskStatus::Done, "no rested bot to check it: it settles");
     assert!(flow::teammates(&hub, "ada").contains("5% of its plan left"));
 }
+
+#[test]
+fn a_bot_whose_last_turn_failed_still_takes_board_work() {
+    use crate::hub::BotStatus;
+    assert!(dispatch::free(BotStatus::Idle) && dispatch::free(BotStatus::Error));
+    assert!(!dispatch::free(BotStatus::Working) && !dispatch::free(BotStatus::NeedsInput));
+}

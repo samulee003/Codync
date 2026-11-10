@@ -60,7 +60,7 @@ pub fn dispatch(hub: &Hub) -> Result<()> {
     let held = held_claims(hub);
     for cfg in eligible(hub)? {
         if out.contains(&cfg.id)
-            || hub.runtime(&cfg.id).status != BotStatus::Idle
+            || !free(hub.runtime(&cfg.id).status)
             || held.get(&cfg.id).copied().unwrap_or(0) >= MAX_CLAIMS
             || super::flow::tired(hub, &cfg.backend)
         {
@@ -81,6 +81,12 @@ pub fn dispatch(hub: &Hub) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Whether a bot in this state can take board work now: idle, or stopped by a failed turn (an error ends that turn;
+/// a new prompt starts afresh, so a bot that failed once, e.g. before its agent was signed in, isn't left out for good).
+pub(super) fn free(status: BotStatus) -> bool {
+    matches!(status, BotStatus::Idle | BotStatus::Error)
 }
 
 /// The user's bots that can work on tasks: not deleted, hidden or a group.

@@ -6,7 +6,7 @@ use super::sheet::{self, BotClass, Deed};
 use super::{MAX_NOTE, MAX_NOTES, Note, Task, TaskStatus, change, children, dispatch, get, take, text, wire};
 use crate::LockExt;
 use crate::agent::bot::Cmd;
-use crate::hub::{BotStatus, Hub};
+use crate::hub::Hub;
 use crate::store::now_ms;
 use anyhow::{Result, ensure};
 use serde_json::{Value, json};
@@ -45,7 +45,7 @@ pub(super) fn checker(hub: &Hub, claimer: &str) -> Option<String> {
         .min_by_key(|c| {
             (
                 sheet::class_of(hub, &c.id) != Some(BotClass::MartialArtist),
-                hub.runtime(&c.id).status != BotStatus::Idle,
+                !dispatch::free(hub.runtime(&c.id).status),
                 held.get(&c.id).copied().unwrap_or(0),
                 c.name.clone(),
             )
