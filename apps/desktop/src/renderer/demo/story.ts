@@ -1,4 +1,5 @@
 import type { Bot, EntryData, Usage } from '@shared/models'
+import type { BotSheet } from '@shared/sheet'
 
 // The website demo's story: four bots on a small `pace` project (an isoWeek / weeklyTotals bug),
 // the "Ship room" group, replies quoting earlier messages and a pending approval. Same story as web/public/screens.
@@ -161,5 +162,33 @@ export function usage(now: number): Usage {
       { id: 'claude', name: 'Claude', shown: true },
       { id: 'codex', name: 'Codex', shown: true },
     ],
+    stamina: {
+      claude: { left: 39, label: 'Weekly', resetsAt: hours(70) },
+      codex: { left: 53, label: 'Weekly', resetsAt: hours(95) },
+    },
   }
 }
+
+/** The bots' character sheets: what each has done on the team board so far. */
+export const sheets: BotSheet[] = [
+  {
+    botId: 'pacer', class: 'strategist', level: 3, xp: 112, levelXp: 80, nextLevelXp: 180,
+    abilities: { might: 40, intellect: 90, command: 85, accuracy: 62, insight: 60 },
+    deeds: { finished: 4, firstTry: 3, sentBack: 1, checked: 1, caught: 0, planned: 9, notes: 5 },
+  },
+  {
+    botId: 'scout', class: 'warrior', level: 4, xp: 205, levelXp: 180, nextLevelXp: 320,
+    abilities: { might: 90, intellect: 45, command: 35, accuracy: 78, insight: 40 },
+    deeds: { finished: 12, firstTry: 9, sentBack: 3, checked: 1, caught: 1, planned: 0, notes: 6 },
+  },
+  {
+    botId: 'reviewer', class: 'inspector', level: 2, xp: 58, levelXp: 20, nextLevelXp: 80,
+    abilities: { might: 40, intellect: 55, command: 40, accuracy: 70, insight: 95 },
+    deeds: { finished: 1, firstTry: 1, sentBack: 0, checked: 8, caught: 3, planned: 0, notes: 2 },
+  },
+  {
+    botId: 'relay', class: null, level: 1, xp: 10, levelXp: 0, nextLevelXp: 20,
+    abilities: { might: 45, intellect: 40, command: 40, accuracy: 46, insight: 40 },
+    deeds: { finished: 1, firstTry: 1, sentBack: 0, checked: 0, caught: 0, planned: 0, notes: 0 },
+  },
+]

@@ -160,5 +160,14 @@ For a bigger job, split it into tasks on the **team board**, the checklist butto
 - **Each task in a git project gets its own copy.** When a bot claims a task in a git repository, it works in a separate worktree on a branch of its own, `codync/task-…`, so bots working in the same project at once never edit the same files. A bot must commit its work before it can finish the task.
 - **You merge.** A finished task with a branch waits under **Ready to merge**. Pick **Merge branch** to merge it into the project's current branch. If the project has uncommitted changes or the branch doesn't merge cleanly, nothing changes and you're told why: reopen the task and ask its bot to bring its branch up to date. Cancelling or deleting a task keeps its branch, so no work is lost.
 
+### Character sheets (desktop app)
+
+Open a bot's details to see its **Character** card, laid out like a unit in a tactics game:
+
+- **Class**: Strategist (plans and splits work), Warrior (builds code and systems), Scholar (writes documents and material), Scout (researches) or Inspector (checks finished work). Pick it on the card, or when you create the bot. The class tells teammates what the bot is for, and an Inspector is asked first to check finished work.
+- **Level and experience**: earned on the team board by finishing tasks, getting them accepted the first time, checking others' work and planning subtasks.
+- **Stamina**: how much of the agent's plan is left, the same bar as under the avatar.
+- **Abilities**: Might, Intellect, Leadership, Accuracy and Insight. The class sets where they start, and they grow with what the bot actually does.
+
 The board pairs well with [computer use](/docs/computer-use): when several bots use the computer at once, give each its own task so they don't drive the same app.
 

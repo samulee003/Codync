@@ -1,5 +1,5 @@
 //! The team board's methods for the apps: `tasks` (with the bots turned off from claiming), `createTask`, `editTask`,
-//! `noteTask`, `assignTask`, `setTaskStatus`, `mergeTask`, `deleteTask`, `setBoardClaims` and `splitGoal`. Task
+//! `noteTask`, `assignTask`, `setTaskStatus`, `mergeTask`, `deleteTask`, `setBoardClaims`, `splitGoal`, `botSheets` and `setBotClass`. Task
 //! changes reach every client as `task` events.
 
 use super::str_arg;
@@ -20,6 +20,13 @@ pub(super) async fn call(hub: &Arc<Hub>, method: &str, b: Value) -> Result<Contr
         "setBoardClaims" => {
             let out = board::dispatch::set_claims(hub, str_arg(&b, "botId")?, b["on"].as_bool().unwrap_or(true))?;
             return Ok(ControlFlow::Break(json!({"optedOut": out})));
+        }
+        // The bots' character sheets: class, level and abilities (`board::sheet`).
+        "botSheets" => return Ok(ControlFlow::Break(json!({"sheets": board::sheet::sheets(hub)?}))),
+        "setBotClass" => {
+            let class = b["class"].as_str().map(board::sheet::BotClass::parse).transpose()?;
+            let sheet = board::sheet::set_class(hub, str_arg(&b, "botId")?, class)?;
+            return Ok(ControlFlow::Break(json!({"sheet": sheet})));
         }
         "splitGoal" => return Ok(ControlFlow::Break(board::dispatch::split_goal(hub, str_arg(&b, "goal")?)?)),
         "createTask" => {

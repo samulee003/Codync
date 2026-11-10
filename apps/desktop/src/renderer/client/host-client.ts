@@ -13,6 +13,7 @@ import {
 } from '@shared/models'
 import type { Artifact, ArtifactChunk, LibraryItem } from '@shared/artifacts'
 import type { BoardTask, TaskStatus } from '@shared/board'
+import type { BotClass, BotSheet } from '@shared/sheet'
 import { parseCallCue, type CallCue } from '@shared/calls'
 import type { NetworkView } from '@shared/network'
 import { trNow } from '../lib/l10n.ts'
@@ -180,6 +181,15 @@ export class HostClient {
 
   setBoardClaims(botId: string, on: boolean): Promise<{ optedOut: string[] }> {
     return this.call('setBoardClaims', { botId, on })
+  }
+
+  /** Every bot's character sheet: class, level and abilities. */
+  botSheets(): Promise<{ sheets: BotSheet[] }> {
+    return this.call('botSheets')
+  }
+
+  setBotClass(botId: string, botClass: BotClass | null): Promise<{ sheet: BotSheet }> {
+    return this.call('setBotClass', { botId, class: botClass })
   }
 
   /** Hands the goal to the lead bot, which splits it into tasks; answers who got it. */

@@ -55,6 +55,37 @@ A user's work never sits for the fastest bot to grab whole:
   feedback becomes a note ("Sent back: …") and the claimer gets the task again with it. After two send-backs, or with
   no other bot, a finish settles without a check.
 
+## Character sheets (`board/sheet.rs`)
+
+Each bot has a sheet, shown like a unit's status screen in a tactics game: the **class** the user gives it, a **level**,
+and five **abilities** (0–100). Kept in kv `board.sheet.<botId>` as the class and the bot's deeds, counted as they happen
+so deleting a task takes nothing back.
+
+| Class (wire) | For | Abilities start at (might, intellect, command, accuracy, insight) |
+|---|---|---|
+| `strategist` | Plans and splits work | 30, 75, 70, 50, 55 |
+| `warrior` | Builds code and systems | 75, 40, 35, 55, 35 |
+| `scholar` | Writes documents and material | 45, 65, 40, 65, 45 |
+| `scout` | Researches | 50, 55, 35, 50, 60 |
+| `inspector` | Checks finished work | 35, 55, 40, 70, 80 |
+
+No class starts every ability at 40. Deeds: `finished` (accepted work), `firstTry` (accepted without a send-back),
+`sentBack`, `checked` (tasks it reviewed), `caught` (reviews that sent work back), `planned` (subtasks it added) and
+`notes`. An ability grows by `min(25, 5·√count)`: might with `finished`, intellect with `planned + notes/2`, command
+with `planned`, insight with `checked + caught`; accuracy moves from the class's start to the bot's own first-try rate
+over its first 10 finished tasks. Experience is `10·finished + 5·firstTry + 4·checked + 3·caught + 6·planned + notes`,
+and level `n` starts at `20·(n−1)²`.
+
+The class also steers the board: nudges and the planner's prompt list each teammate's class, and an inspector is
+picked first to check finished work. Methods: `botSheets` (every bot's sheet: `class`, `level`, `xp`, `levelXp`,
+`nextLevelXp`, `abilities`, `deeds`) and `setBotClass {botId, class|null}`. Stamina is the usage reading
+([usage limits](usage-limits.md)), not part of the sheet.
+
+Clients: the desktop app only for now, by the maintainer's choice to try it there first: the *Character* card at the
+top of a bot's details (class picker, level and experience, stamina, ability chart, deeds), a class picker in *New
+bot*, and the level beside the name in the roster from level 2. iPhone, Android and the terminal UI follow once the
+design has settled.
+
 ## Git worktrees
 
 When a task's project is the top of a git repository with a commit, `claim` runs

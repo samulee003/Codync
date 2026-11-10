@@ -119,10 +119,18 @@ pub async fn call(hub: &Hub, bot: &str, name: &str, args: &Value) -> Result<Valu
                 project: Some(project),
                 parent: args["parentId"].as_str(),
             };
-            super::create(hub, Actor::Bot(bot), &new)?
+            let task = super::create(hub, Actor::Bot(bot), &new)?;
+            if task.parent.is_some() {
+                super::sheet::record(hub, bot, super::sheet::Deed::Planned);
+            }
+            task
         }
         "claim_task" => super::claim(hub, id()?, bot).await?,
-        "note_task" => super::note(hub, id()?, Actor::Bot(bot), args["text"].as_str().unwrap_or_default())?,
+        "note_task" => {
+            let task = super::note(hub, id()?, Actor::Bot(bot), args["text"].as_str().unwrap_or_default())?;
+            super::sheet::record(hub, bot, super::sheet::Deed::Note);
+            task
+        }
         "finish_task" => super::finish(hub, id()?, bot, args["summary"].as_str().unwrap_or_default()).await?,
         "release_task" => super::release(hub, id()?, Actor::Bot(bot), args["reason"].as_str())?,
         "review_task" => {

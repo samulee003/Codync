@@ -1,12 +1,15 @@
 import { hasLibrary } from '@shared/artifacts'
 import { isGroup, isWorking, type Bot } from '@shared/models'
+import type { BotClass } from '@shared/sheet'
 import { AgentIcon } from '../../components/AgentIcon'
 import { BotAvatar, GroupAvatar } from '../../components/Avatar'
+import { CharacterCard } from '../../components/CharacterCard'
 import { IconButton, RowLabel, Switch, TabChoice } from '../../components/Controls'
 import { LeadAgentBadge } from '../../components/LeadAgentBadge'
 import { Icon } from '../../components/Icon'
 import { HStack, VStack } from '../../components/Stack'
 import { Text } from '../../components/Text'
+import { useEffect, useState } from 'react'
 import { useStore } from '../../store/context'
 import { useScreenViewed } from '../../store/analytics'
 import { BotSettingsPanel } from '../bots/BotEditorView'
@@ -61,6 +64,7 @@ export function DetailsPanel({ botId, routineId, tab, setTab, editGroup, openArt
             <div key={tab} className="details-tab fade-in">
               {tab === 'details' ? (
                 <>
+                  {bot ? <Character bot={bot} /> : null}
                   {bot ? <DevServersSection bot={bot} /> : null}
                   <BotSettingsPanel botId={botId} part="often" />
                   {bot ? <ComputerUse bot={bot} /> : null}
@@ -101,6 +105,32 @@ function Identity({ bot }: { bot: Bot }) {
         )}
       </span>
     </div>
+  )
+}
+
+/** The bot's character sheet: class, level, stamina and abilities; a host without sheets shows none. */
+function Character({ bot }: { bot: Bot }) {
+  const tr = useTr()
+  const store = useStore()
+  const client = store.client
+  useEffect(() => { void store.sheets.load(client) }, [store, client, bot.id])
+  const [error, setError] = useState<string | null>(null)
+  const sheet = store.sheets.byBot.get(bot.id)
+  if (!sheet) return null
+  const setClass = (id: BotClass | null) => {
+    store.sheets.setClass(client, bot.id, id).then(() => setError(null), (e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+  }
+  return (
+    <section className="details-section">
+      <Text className="details-section-title">{tr(`Character`)}</Text>
+      <CharacterCard
+        sheet={sheet}
+        stamina={store.usage?.stamina?.[bot.backend]}
+        disabled={store.isOffline}
+        setClass={setClass}
+      />
+      {error ? <Text size="caption" tone="danger">{tr(error)}</Text> : null}
+    </section>
   )
 }
 

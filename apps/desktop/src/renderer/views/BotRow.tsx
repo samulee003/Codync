@@ -7,6 +7,7 @@ import { HStack, VStack } from '../components/Stack'
 import { Text } from '../components/Text'
 import { ThinkingOrb } from '../components/ThinkingOrb'
 import { messagePreview } from '../lib/message-preview'
+import '../components/character-card.css'
 import { useModel } from '../lib/observable'
 import { useTr } from '../lib/use-language'
 import type { BotStore } from '../store/bot-store'
@@ -27,6 +28,7 @@ export const BotRow = memo(function BotRow({ bot, store, compact, usingComputer,
         <HStack align="baseline" gap={4} shrink>
           {bot.pinned ? <Icon name="pin.fill" size={10} color="var(--tertiary)" /> : null}
           <Text size="body" weight={bot.unread > 0 ? 'semibold' : 'medium'} tone="text" truncate>{bot.name}</Text>
+          <LevelChip level={store.sheets.byBot.get(bot.id)?.level} />
           {usingComputer ? <Icon name="cursorarrow.motionlines" size={10} color="var(--accent)" title="Using the computer" /> : null}
         </HStack>
         <HStack gap={6} shrink>
@@ -39,6 +41,13 @@ export const BotRow = memo(function BotRow({ bot, store, compact, usingComputer,
     </HStack>
   )
 })
+
+/** The bot's level beside its name, once it has earned one above the first. */
+function LevelChip({ level }: { level: number | undefined }) {
+  const tr = useTr()
+  if (!level || level < 2) return null
+  return <span className="level-chip">{tr('Lv {level}').replace('{level}', String(level))}</span>
+}
 
 /** Live activity while working, otherwise the last message (Grok Bot row behavior). */
 function Preview({ bot, store }: { bot: Bot; store: BotStore }) {

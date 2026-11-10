@@ -1,6 +1,7 @@
 import type { CallError } from '@shared/ipc'
 import { isChat, isReplyable, normalizeBot, quoteOf, type Bot, type BotDraft, type Entry, type GroupDraft } from '@shared/models'
 import * as story from './story'
+import type { BotSheet } from '@shared/sheet'
 
 // An in-memory codync-host for the website demo: the methods the renderer calls, with the
 // host's JSON shapes (host/src/api/), and the events stream (hello, then catch-up in rev
@@ -15,6 +16,7 @@ export class FakeHost {
   private rev = 0
   private seq = 0
   private bots = new Map<string, Bot>()
+  private sheets = story.sheets
   private entries: Entry[] = []
   private listeners = new Set<(line: string) => void>()
   private turns = new Map<string, number>()
@@ -240,6 +242,14 @@ export class FakeHost {
         this.bots.delete(id)
         this.emit({ type: 'bot', rev: ++this.rev, bot: { id, rev: this.rev, deleted: true } })
         return {}
+      }
+      case 'botSheets':
+        return { sheets: this.sheets }
+      case 'setBotClass': {
+        const known = this.sheets.find((s) => s.botId === str('botId')) ?? { ...story.sheets[3]!, botId: str('botId') }
+        const sheet = { ...known, class: (b.class as BotSheet['class']) ?? null }
+        this.sheets = [...this.sheets.filter((s) => s.botId !== sheet.botId), sheet]
+        return { sheet }
       }
       case 'refreshBackends':
         return { backends: ((await this.call('hello', {})) as { backends: unknown }).backends }

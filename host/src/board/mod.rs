@@ -22,6 +22,7 @@ use std::sync::Mutex;
 pub mod dispatch;
 pub mod flow;
 pub mod git;
+pub mod sheet;
 pub mod tools;
 
 const KEY_PREFIX: &str = "board.task.";
@@ -43,6 +44,8 @@ pub struct Board {
     lock: Mutex<()>,
     /// What each bot was last told about the open tasks (`dispatch`).
     nudges: dispatch::Nudges,
+    /// Serializes changes to the bots' character sheets (`sheet`).
+    sheets: Mutex<()>,
 }
 
 /// Where a task stands (wire values: `open` / `claimed` / `checking` / `review` / `done` / `cancelled`).

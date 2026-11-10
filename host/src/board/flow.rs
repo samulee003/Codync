@@ -2,6 +2,7 @@
 //! job with parts others can do side by side into subtasks it then coordinates), another bot checks finished work
 //! before it counts, and a coordinator hears when all its subtasks are finished so it assembles the result.
 
+use super::sheet::{self, BotClass, Deed};
 use super::{MAX_NOTE, MAX_NOTES, Note, Task, TaskStatus, change, children, dispatch, get, take, text, wire};
 use crate::agent::bot::Cmd;
 use crate::hub::{BotStatus, Hub};
@@ -18,7 +19,8 @@ pub(super) fn settled(task: &Task) -> TaskStatus {
     if task.branch.is_some() { TaskStatus::Review } else { TaskStatus::Done }
 }
 
-/// The bot to check `claimer`'s work: another bot that takes part, idle ones first, then the one holding fewest tasks.
+/// The bot to check `claimer`'s work: another bot that takes part, inspectors first, then idle ones, then the one
+/// holding fewest tasks.
 pub(super) fn checker(hub: &Hub, claimer: &str) -> Option<String> {
     let out = dispatch::opted_out(&hub.store);
     let held = dispatch::held_claims(hub);
@@ -27,7 +29,12 @@ pub(super) fn checker(hub: &Hub, claimer: &str) -> Option<String> {
         .into_iter()
         .filter(|c| c.id != claimer && !out.contains(&c.id))
         .min_by_key(|c| {
-            (hub.runtime(&c.id).status != BotStatus::Idle, held.get(&c.id).copied().unwrap_or(0), c.name.clone())
+            (
+                sheet::class_of(hub, &c.id) != Some(BotClass::Inspector),
+                hub.runtime(&c.id).status != BotStatus::Idle,
+                held.get(&c.id).copied().unwrap_or(0),
+                c.name.clone(),
+            )
         })
         .map(|c| c.id)
 }
@@ -68,6 +75,9 @@ pub(super) fn teammates(hub: &Hub, except: &str) -> String {
         if let Some(model) = c.model.as_deref().filter(|m| !m.is_empty()) {
             let _ = write!(line, ", {model}");
         }
+        if let Some(class) = sheet::class_of(hub, &c.id) {
+            let _ = write!(line, ", {}", class.word());
+        }
         line.push(')');
         let about: String =
             c.description.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(ABOUT).collect();
@@ -104,9 +114,11 @@ pub fn review(hub: &Hub, id: &str, bot: &str, approve: bool, feedback: &str) -> 
         }
         Ok(())
     })?;
+    sheet::record(hub, bot, Deed::Checked { caught: !approve });
     if approve {
-        parent_ready(hub, &task);
+        accepted(hub, &task);
     } else if let Some(claimer) = &task.claimed_by {
+        sheet::record(hub, claimer, Deed::SentBack);
         let name = hub.bot_name(bot);
         send(
             hub,
@@ -139,8 +151,16 @@ pub(super) fn after_finish(hub: &Hub, task: &Task) {
                 ),
             );
         }
-        _ => parent_ready(hub, task),
+        _ => accepted(hub, task),
     }
+}
+
+/// Finished work counts: its claimer earns the deed, and its coordinator may be ready.
+fn accepted(hub: &Hub, task: &Task) {
+    if let Some(claimer) = &task.claimed_by {
+        sheet::record(hub, claimer, Deed::Finished { first_try: task.send_backs == 0 });
+    }
+    parent_ready(hub, task);
 }
 
 /// The user closed a task (done or cancelled) that was still unfinished: its coordinator may be ready.
