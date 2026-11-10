@@ -1,5 +1,5 @@
 import { staminaLevel, type Stamina } from '@shared/models'
-import { ABILITIES, chartPoints, classInfo, levelProgress, type BotClass, type BotSheet } from '@shared/sheet'
+import { ABILITIES, chartPoints, className, classInfo, levelProgress, type BotClass, type BotSheet } from '@shared/sheet'
 import { useTr } from '../lib/use-language'
 import { ClassPicker } from './ClassPicker'
 import { ProgressBar } from './Controls'
@@ -22,7 +22,7 @@ export function CharacterCard({ sheet, stamina, setClass, disabled }: {
   disabled?: boolean
 }) {
   const tr = useTr()
-  const info = classInfo(sheet.class)
+  const info = classInfo(sheet.class, sheet.rank)
   const values = ABILITIES.map((a) => sheet.abilities[a.id])
   const full = ABILITIES.map(() => 100)
   return (
@@ -35,7 +35,13 @@ export function CharacterCard({ sheet, stamina, setClass, disabled }: {
             <span className="character-level">{tr('Lv {level}').replace('{level}', String(sheet.level))}</span>
           </HStack>
           <ProgressBar value={levelProgress(sheet) / 100} label={tr('Experience')} fill="var(--accent)" className="character-xp" />
-          <Text size="caption" tone="secondary">{tr('{xp} / {next} XP').replace('{xp}', String(sheet.xp)).replace('{next}', String(sheet.nextLevelXp))}</Text>
+          <Text size="caption" tone="secondary">
+            {[
+              tr('{xp} / {next} XP').replace('{xp}', String(sheet.xp)).replace('{next}', String(sheet.nextLevelXp)),
+              sheet.class && sheet.rank > 1 ? tr(className(sheet.class)) : null,
+              sheet.class && sheet.nextPromotion ? tr('Promoted at Lv {level}').replace('{level}', String(sheet.nextPromotion)) : null,
+            ].filter(Boolean).join(' · ')}
+          </Text>
         </VStack>
       </HStack>
 
@@ -75,7 +81,7 @@ export function CharacterCard({ sheet, stamina, setClass, disabled }: {
       </Text>
 
       <ClassPicker selection={sheet.class} onChange={setClass} disabled={disabled} />
-      <Text size="caption" tone="secondary">{tr('A class sets where abilities start; they grow with what the bot does on the team board.')}</Text>
+      <Text size="caption" tone="secondary">{tr('A class sets where abilities start; they grow with what the bot does on the team board, and the class is promoted at Lv 5 and Lv 10.')}</Text>
     </VStack>
   )
 }

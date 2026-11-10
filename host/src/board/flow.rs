@@ -19,7 +19,7 @@ pub(super) fn settled(task: &Task) -> TaskStatus {
     if task.branch.is_some() { TaskStatus::Review } else { TaskStatus::Done }
 }
 
-/// The bot to check `claimer`'s work: another bot that takes part, inspectors first, then idle ones, then the one
+/// The bot to check `claimer`'s work: another bot that takes part, martial artists first, then idle ones, then the one
 /// holding fewest tasks.
 pub(super) fn checker(hub: &Hub, claimer: &str) -> Option<String> {
     let out = dispatch::opted_out(&hub.store);
@@ -30,7 +30,7 @@ pub(super) fn checker(hub: &Hub, claimer: &str) -> Option<String> {
         .filter(|c| c.id != claimer && !out.contains(&c.id))
         .min_by_key(|c| {
             (
-                sheet::class_of(hub, &c.id) != Some(BotClass::Inspector),
+                sheet::class_of(hub, &c.id) != Some(BotClass::MartialArtist),
                 hub.runtime(&c.id).status != BotStatus::Idle,
                 held.get(&c.id).copied().unwrap_or(0),
                 c.name.clone(),

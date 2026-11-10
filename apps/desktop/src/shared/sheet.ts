@@ -1,7 +1,7 @@
 // A bot's character sheet on the wire (`host/src/board/sheet.rs`): the class the user gives it, and a level and five
 // abilities that grow with what it does on the team board.
 
-export type BotClass = 'strategist' | 'warrior' | 'scholar' | 'scout' | 'inspector'
+export type BotClass = 'strategist' | 'ruler' | 'general' | 'infantry' | 'martialArtist'
 
 export type Ability = 'might' | 'intellect' | 'command' | 'accuracy' | 'insight'
 
@@ -19,6 +19,10 @@ export interface BotSheet {
   botId: string
   class: BotClass | null
   level: number
+  /** The class's rank: 1, then one more at each promotion (levels 5 and 10). */
+  rank: number
+  /** The level of the next promotion; null once fully promoted. */
+  nextPromotion: number | null
   xp: number
   /** The experience at which this level started, and at which the next one does. */
   levelXp: number
@@ -28,20 +32,31 @@ export interface BotSheet {
   deeds: Deeds
 }
 
-/** The classes, as a picker lists them: name, emblem and what the class is for. */
-export const BOT_CLASSES: { id: BotClass; title: string; symbol: string; role: string }[] = [
-  { id: 'strategist', title: 'Strategist', symbol: 'brain', role: 'Plans and splits work' },
-  { id: 'warrior', title: 'Warrior', symbol: 'hammer', role: 'Builds code and systems' },
-  { id: 'scholar', title: 'Scholar', symbol: 'book', role: 'Writes documents and material' },
-  { id: 'scout', title: 'Scout', symbol: 'magnifyingglass', role: 'Researches' },
-  { id: 'inspector', title: 'Inspector', symbol: 'checkmark.seal', role: 'Checks finished work' },
+/**
+ * The classes, as a picker lists them: emblem, what the class is for, and its title at each rank (the first is the
+ * class's name; the host promotes it at levels 5 and 10).
+ */
+export const BOT_CLASSES: { id: BotClass; titles: [string, string, string]; symbol: string; role: string }[] = [
+  { id: 'strategist', titles: ['Strategist', 'Chief Strategist', 'Grand Strategist'], symbol: 'brain', role: 'Plans and splits work' },
+  { id: 'ruler', titles: ['Ruler', 'Overlord', 'Emperor'], symbol: 'star', role: 'Leads, coordinates and assembles' },
+  { id: 'general', titles: ['Commander', 'High Commander', 'Grand Commander'], symbol: 'bolt', role: 'Builds code and systems' },
+  { id: 'infantry', titles: ['Infantry', 'Elite Infantry', 'Imperial Guard'], symbol: 'person.2', role: 'Steady, well-defined tasks' },
+  { id: 'martialArtist', titles: ['Martial Artist', 'Martial Master', 'Martial Saint'], symbol: 'hand.raised', role: 'Checks finished work' },
 ]
 
 /** A bot with no class yet. */
 export const NO_CLASS = { title: 'No class', symbol: 'person' }
 
-export function classInfo(id: BotClass | null | undefined): { title: string; symbol: string } {
-  return BOT_CLASSES.find((c) => c.id === id) ?? NO_CLASS
+/** A class's name (its first title). */
+export function className(id: BotClass): string {
+  return BOT_CLASSES.find((c) => c.id === id)?.titles[0] ?? NO_CLASS.title
+}
+
+/** What a sheet shows for the bot: its class's title at its rank, and the class's emblem. */
+export function classInfo(id: BotClass | null | undefined, rank = 1): { title: string; symbol: string } {
+  const found = BOT_CLASSES.find((c) => c.id === id)
+  if (!found) return NO_CLASS
+  return { title: found.titles[Math.max(0, Math.min(found.titles.length - 1, rank - 1))]!, symbol: found.symbol }
 }
 
 /** The abilities in the order a sheet shows them, clockwise from the top of its chart. */

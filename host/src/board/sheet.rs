@@ -1,6 +1,7 @@
 //! Each bot's character sheet, as a tactics game shows a unit: the class the user gives it, and a level and five
-//! abilities that grow with what it does on the board (its deeds). A class sets where the abilities start; the deeds
-//! are counted as they happen (`record`) and kept in kv (`board.sheet.<bot>`), so deleting a task takes nothing back.
+//! abilities that grow with what it does on the board (its deeds). A class sets where the abilities start, and it is
+//! promoted at levels 5 and 10 (a new title, every ability up). The deeds are counted as they happen (`record`) and
+//! kept in kv (`board.sheet.<bot>`), so deleting a task takes nothing back.
 
 use super::dispatch;
 use crate::LockExt;
@@ -17,21 +18,25 @@ const MAX_GROWTH: u32 = 25;
 const ACCURACY_TASKS: u32 = 10;
 /// Experience a level costs: level `n` starts at `LEVEL_XP * (n - 1)²`.
 const LEVEL_XP: u32 = 20;
+/// The levels a class is promoted at, each a rank higher.
+const PROMOTIONS: [u32; 2] = [5, 10];
+/// What each promotion adds to every ability.
+const PROMOTION_BONUS: u32 = 6;
 
 /// What a bot is for on the team (wire values in camelCase).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum BotClass {
-    /// Plans and splits work, coordinates the parts.
+    /// Plans and splits work.
     Strategist,
-    /// Builds: code, systems.
-    Warrior,
-    /// Writes: documents, teaching material.
-    Scholar,
-    /// Finds things out.
-    Scout,
-    /// Checks finished work.
-    Inspector,
+    /// Leads the team: coordinates the parts and assembles the result.
+    Ruler,
+    /// Builds the big pieces: code, systems.
+    General,
+    /// Does steady, well-defined work: small tasks, documents, material.
+    Infantry,
+    /// Finds what is wrong: checks finished work.
+    MartialArtist,
 }
 
 impl BotClass {
@@ -42,22 +47,22 @@ impl BotClass {
     /// The class as other bots read it in a prompt.
     pub fn word(self) -> &'static str {
         match self {
-            Self::Strategist => "strategist: plans and coordinates",
-            Self::Warrior => "warrior: builds code and systems",
-            Self::Scholar => "scholar: writes documents and material",
-            Self::Scout => "scout: researches",
-            Self::Inspector => "inspector: checks finished work",
+            Self::Strategist => "strategist: plans and splits work",
+            Self::Ruler => "ruler: leads, coordinates and assembles",
+            Self::General => "general: builds code and systems",
+            Self::Infantry => "infantry: steady, well-defined tasks and material",
+            Self::MartialArtist => "martial artist: checks finished work",
         }
     }
 
     /// Where its abilities start.
     fn base(self) -> Abilities {
         let [might, intellect, command, accuracy, insight] = match self {
-            Self::Strategist => [30, 75, 70, 50, 55],
-            Self::Warrior => [75, 40, 35, 55, 35],
-            Self::Scholar => [45, 65, 40, 65, 45],
-            Self::Scout => [50, 55, 35, 50, 60],
-            Self::Inspector => [35, 55, 40, 70, 80],
+            Self::Strategist => [30, 80, 60, 50, 55],
+            Self::Ruler => [50, 65, 85, 50, 45],
+            Self::General => [80, 45, 55, 55, 35],
+            Self::Infantry => [60, 40, 35, 70, 40],
+            Self::MartialArtist => [55, 50, 30, 60, 85],
         };
         Abilities { might, intellect, command, accuracy, insight }
     }
@@ -177,7 +182,9 @@ fn sheet(bot: &str, saved: &Saved) -> Value {
         "xp": xp,
         "levelXp": level_start(level),
         "nextLevelXp": level_start(level + 1),
-        "abilities": abilities(saved.class, &saved.deeds),
+        "rank": rank(level),
+        "nextPromotion": PROMOTIONS.into_iter().find(|&at| at > level),
+        "abilities": abilities(saved.class, &saved.deeds, rank(level)),
         "deeds": saved.deeds,
     })
 }
@@ -189,6 +196,11 @@ fn experience(deeds: &Deeds) -> u32 {
 /// The level `xp` reaches: 1 at none.
 fn level(xp: u32) -> u32 {
     1 + (xp / LEVEL_XP).isqrt()
+}
+
+/// The class's rank at `level`: 1, then one more at each promotion.
+fn rank(level: u32) -> u32 {
+    1 + u32::try_from(PROMOTIONS.iter().filter(|&&at| level >= at).count()).expect("two promotions")
 }
 
 /// The experience at which `level` starts.
@@ -203,17 +215,19 @@ fn growth(count: u32) -> u32 {
 
 /// The abilities a class starts with (40 each with none), grown by the deeds. Accuracy moves from the class's start to
 /// the bot's own first-try rate as it finishes tasks.
-fn abilities(class: Option<BotClass>, deeds: &Deeds) -> Abilities {
+fn abilities(class: Option<BotClass>, deeds: &Deeds, rank: u32) -> Abilities {
     let base =
         class.map_or(Abilities { might: 40, intellect: 40, command: 40, accuracy: 40, insight: 40 }, BotClass::base);
-    let grown = |start: u32, count: u32| (start + growth(count)).min(MAX_ABILITY);
+    let bonus = PROMOTION_BONUS * (rank - 1);
+    let grown = |start: u32, count: u32| (start + growth(count) + bonus).min(MAX_ABILITY);
     let weight = deeds.finished.min(ACCURACY_TASKS);
     let own = (deeds.first_try * MAX_ABILITY).checked_div(deeds.finished).unwrap_or(0);
     Abilities {
         might: grown(base.might, deeds.finished),
         intellect: grown(base.intellect, deeds.planned + deeds.notes / 2),
         command: grown(base.command, deeds.planned),
-        accuracy: (base.accuracy * (ACCURACY_TASKS - weight) + own * weight) / ACCURACY_TASKS,
+        accuracy: ((base.accuracy * (ACCURACY_TASKS - weight) + own * weight) / ACCURACY_TASKS + bonus)
+            .min(MAX_ABILITY),
         insight: grown(base.insight, deeds.checked + deeds.caught),
     }
 }
@@ -230,22 +244,32 @@ mod tests {
 
     #[test]
     fn deeds_grow_the_abilities_a_class_starts() {
-        let fresh = abilities(Some(BotClass::Warrior), &Deeds::default());
-        assert_eq!(fresh, BotClass::Warrior.base());
+        let fresh = abilities(Some(BotClass::General), &Deeds::default(), 1);
+        assert_eq!(fresh, BotClass::General.base());
         let deeds = Deeds { finished: 4, first_try: 3, checked: 1, caught: 1, planned: 9, notes: 0, sent_back: 1 };
-        let grown = abilities(Some(BotClass::Warrior), &deeds);
-        assert_eq!((grown.might, grown.command, grown.insight), (75 + 10, 35 + 15, 35 + 5));
+        let grown = abilities(Some(BotClass::General), &deeds, 1);
+        assert_eq!((grown.might, grown.command, grown.insight), (80 + 10, 55 + 15, 35 + 5));
         assert_eq!(grown.accuracy, (55 * 6 + 75 * 4) / 10, "four tasks in: partly its own 75%");
         let veteran = Deeds { finished: 400, first_try: 400, ..Deeds::default() };
-        let top = abilities(Some(BotClass::Warrior), &veteran);
+        let top = abilities(Some(BotClass::General), &veteran, 3);
         assert_eq!((top.might, top.accuracy), (100, 100), "growth stops at the ceiling");
-        assert_eq!(abilities(None, &Deeds::default()).might, 40);
+        assert_eq!(abilities(None, &Deeds::default(), 1).might, 40);
+    }
+
+    #[test]
+    fn a_class_is_promoted_at_levels_five_and_ten() {
+        assert_eq!([1, 4, 5, 9, 10, 30].map(rank), [1, 1, 2, 2, 3, 3]);
+        let promoted = abilities(Some(BotClass::Infantry), &Deeds::default(), 3);
+        assert_eq!((promoted.might, promoted.accuracy), (60 + 12, 70 + 12), "two promotions: +6 each");
+        let sheet =
+            sheet("b", &Saved { class: Some(BotClass::Ruler), deeds: Deeds { finished: 13, ..Deeds::default() } });
+        assert_eq!((&sheet["level"], &sheet["rank"], &sheet["nextPromotion"]), (&json!(3), &json!(1), &json!(5)));
     }
 
     #[test]
     fn experience_counts_every_deed() {
         let deeds = Deeds { finished: 2, first_try: 1, sent_back: 1, checked: 3, caught: 1, planned: 2, notes: 4 };
         assert_eq!(experience(&deeds), 20 + 5 + 12 + 3 + 12 + 4);
-        assert!(BotClass::parse("inspector").is_ok() && BotClass::parse("wizard").is_err());
+        assert!(BotClass::parse("martialArtist").is_ok() && BotClass::parse("wizard").is_err());
     }
 }

@@ -172,22 +172,22 @@ export function usage(now: number): Usage {
 /** The bots' character sheets: what each has done on the team board so far. */
 export const sheets: BotSheet[] = [
   {
-    botId: 'pacer', class: 'strategist', level: 3, xp: 112, levelXp: 80, nextLevelXp: 180,
+    botId: 'pacer', class: 'strategist', level: 3, rank: 1, nextPromotion: 5, xp: 112, levelXp: 80, nextLevelXp: 180,
     abilities: { might: 40, intellect: 90, command: 85, accuracy: 62, insight: 60 },
     deeds: { finished: 4, firstTry: 3, sentBack: 1, checked: 1, caught: 0, planned: 9, notes: 5 },
   },
   {
-    botId: 'scout', class: 'warrior', level: 4, xp: 205, levelXp: 180, nextLevelXp: 320,
-    abilities: { might: 90, intellect: 45, command: 35, accuracy: 78, insight: 40 },
+    botId: 'scout', class: 'general', level: 5, rank: 2, nextPromotion: 10, xp: 330, levelXp: 320, nextLevelXp: 500,
+    abilities: { might: 98, intellect: 51, command: 61, accuracy: 84, insight: 41 },
     deeds: { finished: 12, firstTry: 9, sentBack: 3, checked: 1, caught: 1, planned: 0, notes: 6 },
   },
   {
-    botId: 'reviewer', class: 'inspector', level: 2, xp: 58, levelXp: 20, nextLevelXp: 80,
+    botId: 'reviewer', class: 'martialArtist', level: 2, rank: 1, nextPromotion: 5, xp: 58, levelXp: 20, nextLevelXp: 80,
     abilities: { might: 40, intellect: 55, command: 40, accuracy: 70, insight: 95 },
     deeds: { finished: 1, firstTry: 1, sentBack: 0, checked: 8, caught: 3, planned: 0, notes: 2 },
   },
   {
-    botId: 'relay', class: null, level: 1, xp: 10, levelXp: 0, nextLevelXp: 20,
+    botId: 'relay', class: null, level: 1, rank: 1, nextPromotion: 5, xp: 10, levelXp: 0, nextLevelXp: 20,
     abilities: { might: 45, intellect: 40, command: 40, accuracy: 46, insight: 40 },
     deeds: { finished: 1, firstTry: 1, sentBack: 0, checked: 0, caught: 0, planned: 0, notes: 0 },
   },

@@ -304,7 +304,7 @@ async fn a_checker_sends_work_back_twice_at_most() {
     assert_eq!(done.status, TaskStatus::Done, "sent back twice: the next finish counts");
 
     // Their sheets count what each did, and a class sets where the abilities start.
-    sheet::set_class(&hub, "bo", Some(sheet::BotClass::Inspector)).unwrap();
+    sheet::set_class(&hub, "bo", Some(sheet::BotClass::MartialArtist)).unwrap();
     assert!(sheet::set_class(&hub, "nobody", None).is_err());
     let sheets = sheet::sheets(&hub).unwrap();
     let of = |bot: &str| sheets.iter().find(|s| s["botId"] == bot).unwrap().clone();
@@ -315,10 +315,10 @@ async fn a_checker_sends_work_back_twice_at_most() {
     );
     assert_eq!(
         (&bo["deeds"]["checked"], &bo["deeds"]["caught"], &bo["class"]),
-        (&json!(2), &json!(2), &json!("inspector"))
+        (&json!(2), &json!(2), &json!("martialArtist"))
     );
     assert_eq!((&ada["class"], &ada["level"], &ada["xp"]), (&json!(null), &json!(1), &json!(10)));
-    assert_eq!(bo["abilities"]["insight"], 80 + 10, "an inspector's insight, grown by four deeds");
+    assert_eq!(bo["abilities"]["insight"], 85 + 10, "a martial artist's insight, grown by four deeds");
 }
 
 #[tokio::test]

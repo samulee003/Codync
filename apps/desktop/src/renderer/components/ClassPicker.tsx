@@ -15,7 +15,7 @@ export function ClassPicker({ selection, onChange, disabled }: { selection: BotC
           <button key={c.id} type="button" role="radio" aria-checked={on} disabled={disabled} title={tr(c.role)}
             className={`press class-tile${on ? ' on' : ''}`} onClick={() => onChange(on ? null : c.id)}>
             <Icon name={c.symbol} size={16} color={on ? 'var(--accent)' : 'var(--secondary)'} />
-            <Text size="caption" weight={on ? 'semibold' : 'medium'} tone={on ? 'text' : 'secondary'} truncate>{tr(c.title)}</Text>
+            <Text size="caption" weight={on ? 'semibold' : 'medium'} tone={on ? 'text' : 'secondary'} truncate>{tr(c.titles[0])}</Text>
           </button>
         )
       })}

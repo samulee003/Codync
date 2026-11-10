@@ -58,16 +58,17 @@ A user's work never sits for the fastest bot to grab whole:
 ## Character sheets (`board/sheet.rs`)
 
 Each bot has a sheet, shown like a unit's status screen in a tactics game: the **class** the user gives it, a **level**,
-and five **abilities** (0–100). Kept in kv `board.sheet.<botId>` as the class and the bot's deeds, counted as they happen
+a **rank** (the class is promoted at levels 5 and 10, each promotion adding 6 to every ability), and five **abilities**
+(0–100). Kept in kv `board.sheet.<botId>` as the class and the bot's deeds, counted as they happen
 so deleting a task takes nothing back.
 
-| Class (wire) | For | Abilities start at (might, intellect, command, accuracy, insight) |
-|---|---|---|
-| `strategist` | Plans and splits work | 30, 75, 70, 50, 55 |
-| `warrior` | Builds code and systems | 75, 40, 35, 55, 35 |
-| `scholar` | Writes documents and material | 45, 65, 40, 65, 45 |
-| `scout` | Researches | 50, 55, 35, 50, 60 |
-| `inspector` | Checks finished work | 35, 55, 40, 70, 80 |
+| Class (wire) | Titles by rank | For | Abilities start at (might, intellect, command, accuracy, insight) |
+|---|---|---|---|
+| `strategist` | Strategist, Chief Strategist, Grand Strategist | Plans and splits work | 30, 80, 60, 50, 55 |
+| `ruler` | Ruler, Overlord, Emperor | Leads, coordinates and assembles | 50, 65, 85, 50, 45 |
+| `general` | Commander, High Commander, Grand Commander | Builds code and systems | 80, 45, 55, 55, 35 |
+| `infantry` | Infantry, Elite Infantry, Imperial Guard | Steady, well-defined tasks | 60, 40, 35, 70, 40 |
+| `martialArtist` | Martial Artist, Martial Master, Martial Saint | Checks finished work | 55, 50, 30, 60, 85 |
 
 No class starts every ability at 40. Deeds: `finished` (accepted work), `firstTry` (accepted without a send-back),
 `sentBack`, `checked` (tasks it reviewed), `caught` (reviews that sent work back), `planned` (subtasks it added) and
@@ -76,9 +77,9 @@ with `planned`, insight with `checked + caught`; accuracy moves from the class's
 over its first 10 finished tasks. Experience is `10·finished + 5·firstTry + 4·checked + 3·caught + 6·planned + notes`,
 and level `n` starts at `20·(n−1)²`.
 
-The class also steers the board: nudges and the planner's prompt list each teammate's class, and an inspector is
-picked first to check finished work. Methods: `botSheets` (every bot's sheet: `class`, `level`, `xp`, `levelXp`,
-`nextLevelXp`, `abilities`, `deeds`) and `setBotClass {botId, class|null}`. Stamina is the usage reading
+The class also steers the board: nudges and the planner's prompt list each teammate's class, and a martial artist is
+picked first to check finished work. Methods: `botSheets` (every bot's sheet: `class`, `level`, `rank`,
+`nextPromotion`, `xp`, `levelXp`, `nextLevelXp`, `abilities`, `deeds`) and `setBotClass {botId, class|null}`. Stamina is the usage reading
 ([usage limits](usage-limits.md)), not part of the sheet.
 
 Clients: the desktop app only for now, by the maintainer's choice to try it there first: the *Character* card at the
