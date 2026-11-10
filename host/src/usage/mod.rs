@@ -109,7 +109,7 @@ pub struct Window {
 }
 
 impl Window {
-    fn new(id: impl Into<String>, label: impl Into<String>, percent: f64, resets_at: Option<i64>) -> Self {
+    pub(crate) fn new(id: impl Into<String>, label: impl Into<String>, percent: f64, resets_at: Option<i64>) -> Self {
         Self { id: id.into(), label: label.into(), percent, resets_at, resets_text: None, text: None }
     }
 

@@ -332,3 +332,26 @@ async fn the_user_can_hand_a_planned_task_to_another_bot() {
     assert_eq!(assign(&hub, &task.id, other).await.unwrap_err().to_string(), "unknown bot");
     assert_eq!(get(&hub.store, &task.id).unwrap().claimed_by.as_deref(), Some(other));
 }
+
+#[tokio::test]
+async fn a_tired_bot_is_left_out_of_board_work() {
+    let hub = hub();
+    let task = new_task(&hub, "Write the docs", None);
+    claim(&hub, &task.id, "ada").await.unwrap();
+    // Both bots run Claude, and its plan is nearly spent.
+    hub.usage.locked().providers = vec![crate::usage::Provider {
+        id: "claude",
+        name: "Claude",
+        registry: None,
+        windows: vec![crate::usage::Window::new("week", "Weekly", 95.0, None)],
+        source: "test",
+        updated_at: 0,
+    }];
+    assert!(flow::tired(&hub, "claude") && !flow::tired(&hub, "codex"), "no reading: never tired");
+    new_task(&hub, "Fix the build", None);
+    dispatch::dispatch(&hub).unwrap();
+    assert!(hub.board.nudges.told.locked().is_empty(), "a tired bot isn't nudged");
+    let done = finish(&hub, &task.id, "ada", "Wrote them").await.unwrap();
+    assert_eq!(done.status, TaskStatus::Done, "no rested bot to check it: it settles");
+    assert!(flow::teammates(&hub, "ada").contains("5% of its plan left"));
+}

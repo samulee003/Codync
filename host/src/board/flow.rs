@@ -4,6 +4,7 @@
 
 use super::sheet::{self, BotClass, Deed};
 use super::{MAX_NOTE, MAX_NOTES, Note, Task, TaskStatus, change, children, dispatch, get, take, text, wire};
+use crate::LockExt;
 use crate::agent::bot::Cmd;
 use crate::hub::{BotStatus, Hub};
 use crate::store::now_ms;
@@ -13,21 +14,34 @@ use std::fmt::Write as _;
 
 /// Longest description of a teammate a prompt quotes.
 const ABOUT: usize = 120;
+/// Stamina (share of the agent's tightest limit left) below which a bot is too tired for board work: it isn't nudged
+/// or picked to check, so its plan isn't spent to the last drop.
+pub(super) const TIRED: u8 = 10;
+
+/// What is left of the plan of the agent `backend` runs, when it was read.
+pub(super) fn stamina(hub: &Hub, backend: &str) -> Option<u8> {
+    hub.usage.locked().visible().stamina.get(backend).map(|s| s.left)
+}
+
+/// Whether a bot is too tired for board work (an agent with no reading never is).
+pub(super) fn tired(hub: &Hub, backend: &str) -> bool {
+    stamina(hub, backend).is_some_and(|left| left < TIRED)
+}
 
 /// Where finished, accepted work lands: waiting for the user's merge when it has a branch, else done.
 pub(super) fn settled(task: &Task) -> TaskStatus {
     if task.branch.is_some() { TaskStatus::Review } else { TaskStatus::Done }
 }
 
-/// The bot to check `claimer`'s work: another bot that takes part, martial artists first, then idle ones, then the one
-/// holding fewest tasks.
+/// The bot to check `claimer`'s work: another bot that takes part and isn't tired, martial artists first, then idle
+/// ones, then the one holding fewest tasks.
 pub(super) fn checker(hub: &Hub, claimer: &str) -> Option<String> {
     let out = dispatch::opted_out(&hub.store);
     let held = dispatch::held_claims(hub);
     dispatch::eligible(hub)
         .ok()?
         .into_iter()
-        .filter(|c| c.id != claimer && !out.contains(&c.id))
+        .filter(|c| c.id != claimer && !out.contains(&c.id) && !tired(hub, &c.backend))
         .min_by_key(|c| {
             (
                 sheet::class_of(hub, &c.id) != Some(BotClass::MartialArtist),
@@ -77,6 +91,9 @@ pub(super) fn teammates(hub: &Hub, except: &str) -> String {
         }
         if let Some(class) = sheet::class_of(hub, &c.id) {
             let _ = write!(line, ", {}", class.word());
+        }
+        if let Some(left) = stamina(hub, &c.backend) {
+            let _ = write!(line, ", {left}% of its plan left");
         }
         line.push(')');
         let about: String =

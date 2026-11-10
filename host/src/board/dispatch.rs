@@ -48,7 +48,8 @@ pub async fn dispatch_loop(hub: Arc<Hub>) {
     }
 }
 
-/// Tells each idle bot that takes part about the open tasks, unless it already heard about these.
+/// Tells each idle bot that takes part about the open tasks, unless it already heard about these or is too tired
+/// (`flow::TIRED`).
 pub fn dispatch(hub: &Hub) -> Result<()> {
     let open: Vec<super::Task> = super::list(&hub.store).into_iter().filter(|t| t.status == TaskStatus::Open).collect();
     if open.is_empty() {
@@ -61,6 +62,7 @@ pub fn dispatch(hub: &Hub) -> Result<()> {
         if out.contains(&cfg.id)
             || hub.runtime(&cfg.id).status != BotStatus::Idle
             || held.get(&cfg.id).copied().unwrap_or(0) >= MAX_CLAIMS
+            || super::flow::tired(hub, &cfg.backend)
         {
             continue;
         }
