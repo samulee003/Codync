@@ -24,7 +24,8 @@
 }
 .character-xp { height: 4px; }
 .character-bar { flex: 1; height: 6px; }
-.character-stat-name { flex: none; width: 3.2em; }
+/* Wide enough for the longest ability name in every language ("Leadership"), so the bars line up. */
+.character-stat-name { flex: none; width: 6.4em; white-space: nowrap; }
 .character-stat-value { flex: none; width: 2.2em; text-align: right; font-variant-numeric: tabular-nums; }
 .character-bar.stamina-full .progress-fill { background: var(--added); }
 .character-bar.stamina-low .progress-fill { background: var(--warning); }
