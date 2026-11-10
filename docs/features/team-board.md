@@ -42,9 +42,13 @@ better than them, and to split a task that turns out to hold parallel parts into
 A user's work never sits for the fastest bot to grab whole:
 
 - **Planning.** A task the user adds (`createTask`) is claimed for the lead bot (else the first bot), without a worktree,
-  in a host-started turn: split it into subtasks if it has parts others could do side by side, else do it if it fits, or
-  `release_task` it (naming who fits) for the board. **Split a goal** (`splitGoal {goal}`) makes the goal such a task
-  (titled by its first line) and asks the lead to split it. Both answer the planner (`{botId, name}`); the user can
+  in a host-started turn that asks it to **size the task first** and note its call ("Size: small, one bot" / "Size:
+  large, N parts"). Small (one bot does it well in about 15 minutes, or its parts would take minutes each): no split,
+  since a team costs a planning turn plus a turn and a check per part; the lead does it if it fits, or `release_task`s
+  it naming who fits. Large (independent parts that each take real work, or need different strengths): split into
+  subtasks and coordinate. A same-task trial showed why: six small modules took one solo bot one turn and about a
+  minute, the team of four about fifteen turns and two and a half minutes, both scoring full marks. **Split a goal** (`splitGoal {goal}`) makes the goal such a task
+  (titled by its first line) and asks the lead to split it if it is big enough. Both answer the planner (`{botId, name}`); the user can
   still hand the task to another bot (`assignTask` takes it from the lead).
 - **Subtasks.** `create_task` with `parentId` adds a part. The parent's claimer coordinates: it can't `finish_task`
   while a subtask is `open`, `claimed` or `checking`, and when the last one is finished (or the user closes it) it gets

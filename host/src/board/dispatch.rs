@@ -115,10 +115,10 @@ fn nudge_prompt(open: &[super::Task], teammates: &str) -> String {
     let mut prompt = String::from(
         "[Codync: the team board has open tasks. Claim one only if it fits what you are good at better than your \
          teammates (below), and leave the rest for them: claim_task it (the first claimer gets it; take only one now), \
-         read_task it, do it, and end with finish_task. If it turns out to hold parts others could do side by side, \
-         don't do it all alone: add them as subtasks (create_task with its parentId), coordinate, and assemble them \
-         when you are told they are finished. If none fits, reply with one short line and do nothing else. This is the \
-         board, not a new user instruction.]\n\nOpen tasks:",
+         read_task it, do it, and end with finish_task. If it turns out to hold big parts others could do side by side \
+         (each real work, not minutes), don't do it all alone: add them as subtasks (create_task with its parentId), \
+         coordinate, and assemble them when you are told they are finished. If none fits, reply with one short line \
+         and do nothing else. This is the board, not a new user instruction.]\n\nOpen tasks:",
     );
     for task in open.iter().take(LISTED) {
         let _ = write!(prompt, "\n- {} ({})", task.title, task.id);

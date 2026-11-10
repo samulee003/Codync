@@ -58,26 +58,34 @@ pub(super) fn checker(hub: &Hub, claimer: &str) -> Option<String> {
 pub fn plan(hub: &Hub, id: &str, split: bool) -> Result<Value> {
     let lead = dispatch::lead(hub)?;
     let task = take(hub, id, &lead.id)?;
-    let how = if split {
-        "Split it into subtasks"
-    } else {
-        "If it has parts other bots could do side by side, split it into subtasks; if it is one bot's job, do it \
-         yourself when it fits you, or release_task it (saying who fits) so a better-fitting teammate claims it"
-    };
+    send(hub, &lead.id, plan_prompt(&task, split, &teammates(hub, &lead.id)));
+    Ok(json!({"botId": lead.id, "name": lead.name}))
+}
+
+/// What the lead is told to plan a task: size it first, so only work big enough to gain from the team is split (a team
+/// costs a planning turn, a turn per part and a check per part: a task one bot does in minutes is faster and cheaper
+/// alone). `split`: the user asked for a split (the wand), which still yields to a small task.
+pub(super) fn plan_prompt(task: &Task, split: bool, teammates: &str) -> String {
+    let id = &task.id;
+    let asked = if split { " The user asked for it to be split if it is big enough." } else { "" };
     let mut prompt = format!(
-        "[Codync: the user put task {id} on the team board, and as the lead you plan it: it is claimed for you. {how}. \
+        "[Codync: the user put task {id} on the team board, and as the lead you plan it: it is claimed for you.{asked} \
+         First size it, and note_task {id} your call in one line (\"Size: small, one bot\" or \"Size: large, N parts\", \
+         with why). Small: one bot can do it well in about 15 minutes, or its parts would each take only a few \
+         minutes: then don't split, since every part costs a turn and a check. Do it yourself when it fits you, or \
+         release_task {id} naming the teammate who fits it best. Large: it has independent parts that each take real \
+         work (about 10 minutes or more), or that need different strengths: split it into those parts and coordinate. \
          A subtask is create_task with parentId {id}: self-contained (what to do, where, how to check it is done), one \
          bot's work, naming in its detail the teammate who fits it best. Don't do the subtasks yourself: the bots \
          claim them, and you will be told when they are all finished; then check and assemble their results into the \
-         task's result and finish_task {id}. Tell the user in a few lines how you planned it.]\n\nTask: {}",
+         task's result and finish_task {id}. Tell the user in a few lines how you sized and planned it.]\n\nTask: {}",
         task.title
     );
     if !task.detail.is_empty() {
         let _ = write!(prompt, "\n\n{}", task.detail);
     }
-    let _ = write!(prompt, "\n\n{}", teammates(hub, &lead.id));
-    send(hub, &lead.id, prompt);
-    Ok(json!({"botId": lead.id, "name": lead.name}))
+    let _ = write!(prompt, "\n\n{teammates}");
+    prompt
 }
 
 /// The other bots taking part, with what each runs and is for, so a bot can tell who fits a piece of work.

@@ -362,3 +362,14 @@ fn a_bot_whose_last_turn_failed_still_takes_board_work() {
     assert!(dispatch::free(BotStatus::Idle) && dispatch::free(BotStatus::Error));
     assert!(!dispatch::free(BotStatus::Working) && !dispatch::free(BotStatus::NeedsInput));
 }
+
+#[test]
+fn the_lead_sizes_a_task_before_splitting_it() {
+    let hub = hub();
+    let task = new_task(&hub, "Fix the typo", None);
+    let plain = flow::plan_prompt(&task, false, "Teammates:");
+    assert!(plain.contains("First size it") && plain.contains("Size: small, one bot") && plain.contains("15 minutes"));
+    assert!(!plain.contains("asked for it to be split"));
+    let wand = flow::plan_prompt(&task, true, "Teammates:\n- Ada (codex)");
+    assert!(wand.contains("asked for it to be split if it is big enough") && wand.ends_with("- Ada (codex)"));
+}
