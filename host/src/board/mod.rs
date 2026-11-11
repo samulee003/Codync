@@ -472,9 +472,9 @@ pub async fn delete(hub: &Hub, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// The user hands a task to a bot: it is claimed for the bot (taken from a bot holding it, such as the lead planning
-/// it), which starts on it in its own chat.
-pub async fn assign(hub: &Hub, id: &str, bot: &str) -> Result<Task> {
+/// The user (or the lead, for a subtask it planned) hands a task to a bot: it is claimed for the bot (taken from a bot
+/// holding it, such as the lead planning it), which starts on it in its own chat.
+pub async fn assign(hub: &Hub, id: &str, bot: &str, by: Actor<'_>) -> Result<Task> {
     let row =
         hub.store.bot(bot)?.filter(|r| !r.deleted && !r.config.is_group()).ok_or_else(|| anyhow!("unknown bot"))?;
     let held = get(&hub.store, id)?;
@@ -482,15 +482,19 @@ pub async fn assign(hub: &Hub, id: &str, bot: &str) -> Result<Task> {
         release(hub, id, Actor::User, None)?;
     }
     let task = claim(hub, id, &row.config.id).await?;
-    hub.send_cmd(&row.config.id, Cmd::Prompt { text: assigned_prompt(&task), call: None })?;
+    let who = match by {
+        Actor::User => "the user".to_owned(),
+        Actor::Bot(lead) => hub.bot_name(lead),
+    };
+    hub.send_cmd(&row.config.id, Cmd::Prompt { text: assigned_prompt(&task, &who), call: None })?;
     Ok(task)
 }
 
-fn assigned_prompt(task: &Task) -> String {
+fn assigned_prompt(task: &Task, who: &str) -> String {
     let mut prompt = format!(
-        "[Codync: the user assigned you task {} on the team board, and it is claimed for you. Read it with read_task, \
-         work on it, share findings others could use with note_task, and end with finish_task (or release_task if you \
-         can't do it). Tell the user in this chat what you did.]\n\nTask: {}",
+        "[Codync: {who} assigned you task {} on the team board, and it is claimed for you. Read it with read_task, \
+         work on it (its folder is yours to work in), share findings others could use with note_task, and end with \
+         finish_task (or release_task if you can't do it). Tell the user in this chat what you did.]\n\nTask: {}",
         task.id, task.title
     );
     if !task.detail.is_empty() {

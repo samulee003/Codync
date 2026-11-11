@@ -50,7 +50,7 @@ A user's work never sits for the fastest bot to grab whole:
   minute, the team of four about fifteen turns and two and a half minutes, both scoring full marks. **Split a goal** (`splitGoal {goal}`) makes the goal such a task
   (titled by its first line) and asks the lead to split it if it is big enough. Both answer the planner (`{botId, name}`); the user can
   still hand the task to another bot (`assignTask` takes it from the lead).
-- **Subtasks.** `create_task` with `parentId` adds a part. The parent's claimer coordinates: it can't `finish_task`
+- **Subtasks.** `create_task` with `parentId` adds a part; with `assignee` (a teammate's name) the lead hands it straight to that bot, which gets a turn to start on it (a trial showed bots told to claim only what fits them better than their teammates all deferred and nobody started). Nudges now say every task needs doing: claim the one that names you, else one that fits, and take a task that has waited rather than hold out for a better fit. The parent's claimer coordinates: it can't `finish_task`
   while a subtask is `open`, `claimed` or `checking`, and when the last one is finished (or the user closes it) it gets
   a turn listing the parts and their summaries, to check and assemble them and finish the parent.
 - **Checking.** `finish_task` puts the task in `checking` with a checker: another bot that takes part, idle ones first,
@@ -106,7 +106,7 @@ task removes its worktree and keeps its branch, so no commit is lost. `GIT_*` va
 ## Bots' tools
 
 On every bot's `team` MCP server, next to `list_bots` and `message_bot`: `list_tasks` (`status`, `mine`), `read_task`,
-`create_task` (project defaults to the bot's folder; `parentId` for a subtask), `claim_task` (answers `workIn` with the
+`create_task` (project defaults to the bot's folder; `parentId` for a subtask; `assignee` hands it to a teammate), `claim_task` (answers `workIn` with the
 worktree), `note_task`, `finish_task` (`summary` required), `release_task` (`reason` becomes a note) and `review_task`
 (`approve`, `feedback`). `read_task` includes `checkedBy`, `parentId` and the `subtasks` with their summaries.
 

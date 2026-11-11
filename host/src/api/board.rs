@@ -46,7 +46,7 @@ pub(super) async fn call(hub: &Arc<Hub>, method: &str, b: Value) -> Result<Contr
         }
         "editTask" => board::edit(hub, str_arg(&b, "taskId")?, b["title"].as_str(), b["detail"].as_str())?,
         "noteTask" => board::note(hub, str_arg(&b, "taskId")?, Actor::User, str_arg(&b, "text")?)?,
-        "assignTask" => board::assign(hub, str_arg(&b, "taskId")?, str_arg(&b, "botId")?).await?,
+        "assignTask" => board::assign(hub, str_arg(&b, "taskId")?, str_arg(&b, "botId")?, Actor::User).await?,
         "setTaskStatus" => {
             board::set_status(hub, str_arg(&b, "taskId")?, TaskStatus::parse(str_arg(&b, "status")?)?).await?
         }

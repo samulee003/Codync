@@ -76,9 +76,11 @@ pub(super) fn plan_prompt(task: &Task, split: bool, teammates: &str) -> String {
          release_task {id} naming the teammate who fits it best. Large: it has independent parts that each take real \
          work (about 10 minutes or more), or that need different strengths: split it into those parts and coordinate. \
          A subtask is create_task with parentId {id}: self-contained (what to do, where, how to check it is done), one \
-         bot's work, naming in its detail the teammate who fits it best. Don't do the subtasks yourself: the bots \
-         claim them, and you will be told when they are all finished; then check and assemble their results into the \
-         task's result and finish_task {id}. Tell the user in a few lines how you sized and planned it.]\n\nTask: {}",
+         bot's work, and handed to the teammate who fits it best with assignee (by class and what is left of their \
+         plan); leave assignee out only if anyone can do it. Order parts that build on others: say in a part's detail \
+         what it waits for. Don't do the subtasks yourself: you will be told when they are all finished; then check \
+         and assemble their results into the task's result and finish_task {id}. Tell the user in a few lines how you \
+         sized and planned it.]\n\nTask: {}",
         task.title
     );
     if !task.detail.is_empty() {

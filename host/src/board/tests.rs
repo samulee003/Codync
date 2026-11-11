@@ -329,7 +329,7 @@ async fn the_user_can_hand_a_planned_task_to_another_bot() {
     let lead = get(&hub.store, &task.id).unwrap().claimed_by.unwrap();
     let other = if lead == "ada" { "bo" } else { "ada" };
     // No actor runs in tests: telling the bot fails once the task is claimed for it.
-    assert_eq!(assign(&hub, &task.id, other).await.unwrap_err().to_string(), "unknown bot");
+    assert_eq!(assign(&hub, &task.id, other, Actor::User).await.unwrap_err().to_string(), "unknown bot");
     assert_eq!(get(&hub.store, &task.id).unwrap().claimed_by.as_deref(), Some(other));
 }
 
@@ -372,4 +372,30 @@ fn the_lead_sizes_a_task_before_splitting_it() {
     assert!(!plain.contains("asked for it to be split"));
     let wand = flow::plan_prompt(&task, true, "Teammates:\n- Ada (codex)");
     assert!(wand.contains("asked for it to be split if it is big enough") && wand.ends_with("- Ada (codex)"));
+}
+
+#[tokio::test]
+async fn the_lead_hands_a_subtask_to_a_teammate_by_name() {
+    let hub = hub();
+    let parent = new_task(&hub, "Build the library", None);
+    flow::plan(&hub, &parent.id, false).unwrap();
+    let lead = get(&hub.store, &parent.id).unwrap().claimed_by.unwrap();
+    let (other, other_name) = if lead == "ada" { ("bo", "BO") } else { ("ada", "ADA") };
+    let wrong =
+        tools::call(&hub, &lead, "create_task", &json!({"title": "Docs", "parentId": parent.id, "assignee": "Zed"}))
+            .await
+            .unwrap_err()
+            .to_string();
+    assert!(wrong.contains("no teammate named Zed") && wrong.contains(other_name), "{wrong}");
+    // No actor runs in tests: telling the teammate fails once the subtask is claimed for them.
+    let told = tools::call(
+        &hub,
+        &lead,
+        "create_task",
+        &json!({"title": "API", "parentId": parent.id, "assignee": other_name}),
+    )
+    .await;
+    assert_eq!(told.unwrap_err().to_string(), "unknown bot");
+    let api = list(&hub.store).into_iter().find(|t| t.title == "API").unwrap();
+    assert_eq!((api.status, api.claimed_by.as_deref()), (TaskStatus::Claimed, Some(other)));
 }

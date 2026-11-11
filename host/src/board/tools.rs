@@ -55,6 +55,7 @@ pub fn schemas() -> Vec<Value> {
                 "detail": {"type": "string", "description": "What to do, relevant context and the expected result."},
                 "project": {"type": "string", "description": "Absolute folder the work is in (default: your working directory). A git repository gives each claimer its own worktree."},
                 "parentId": {"type": "string", "description": "The task this is a part of."},
+                "assignee": {"type": "string", "description": "A teammate's name: the subtask is claimed for them and they start on it at once. Leave it out to let any bot claim it."},
             }, "required": ["title"]},
             "annotations": {"readOnlyHint": false, "idempotentHint": false},
         }),
@@ -123,7 +124,13 @@ pub async fn call(hub: &Hub, bot: &str, name: &str, args: &Value) -> Result<Valu
             if task.parent.is_some() {
                 super::sheet::record(hub, bot, super::sheet::Deed::Planned);
             }
-            task
+            match args["assignee"].as_str().map(str::trim).filter(|a| !a.is_empty()) {
+                Some(name) => {
+                    let to = teammate(hub, name)?;
+                    super::assign(hub, &task.id, &to, Actor::Bot(bot)).await?
+                }
+                None => task,
+            }
         }
         "claim_task" => super::claim(hub, id()?, bot).await?,
         "note_task" => {
@@ -146,6 +153,15 @@ pub async fn call(hub: &Hub, bot: &str, name: &str, args: &Value) -> Result<Valu
         answer["workIn"] = worktree_hint(tree, task.branch.as_deref()).into();
     }
     Ok(answer)
+}
+
+/// A teammate on the board by name (or id); the error lists who there is.
+fn teammate(hub: &Hub, name: &str) -> Result<String> {
+    let bots = super::dispatch::eligible(hub)?;
+    bots.iter().find(|c| c.name == name || c.id == name).map(|c| c.id.clone()).ok_or_else(|| {
+        let names: Vec<&str> = bots.iter().map(|c| c.name.as_str()).collect();
+        anyhow!("no teammate named {name}: the team is {}", names.join(", "))
+    })
 }
 
 fn list(hub: &Hub, bot: &str, args: &Value) -> Value {
