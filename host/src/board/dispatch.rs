@@ -168,7 +168,14 @@ pub fn split_goal(hub: &Hub, goal: &str) -> Result<Value> {
     let task = super::create(
         hub,
         super::Actor::User,
-        &super::NewTask { title: &goal_title(&goal), detail: &goal, project: None, parent: None },
+        &super::NewTask {
+            title: &goal_title(&goal),
+            detail: &goal,
+            project: None,
+            parent: None,
+            acceptance: vec![],
+            approve_plan: true,
+        },
     )?;
     super::flow::plan(hub, &task.id, true)
 }
@@ -208,6 +215,10 @@ mod tests {
             parent: None,
             reviewer: None,
             send_backs: 0,
+            acceptance: vec![],
+            plan: None,
+            approval: super::super::brief::Approval::NotNeeded,
+            checks: vec![],
             created_at: 0,
             updated_at: 0,
             rev: 0,

@@ -24,7 +24,17 @@ fn folder() -> String {
 }
 
 fn new_task(hub: &Hub, title: &str, project: Option<&str>) -> Task {
-    create(hub, Actor::User, &NewTask { title, detail: "", project, parent: None }).unwrap()
+    create(
+        hub,
+        Actor::User,
+        &NewTask { title, detail: "", project, parent: None, acceptance: vec![], approve_plan: false },
+    )
+    .unwrap()
+}
+
+/// A checker's plain verdict, with no per-criterion checks.
+fn review(hub: &Hub, id: &str, bot: &str, approve: bool, feedback: &str) -> Result<Task> {
+    flow::review(hub, id, bot, flow::Verdict { approve: Some(approve), checks: &Value::Null, feedback })
 }
 
 /// git in `dir` alone: a pre-commit hook running these tests sets `GIT_DIR` for the commit.
@@ -101,7 +111,7 @@ async fn release_note_and_finish_without_a_repository() {
         (TaskStatus::Checking, Some("ada")),
         "the other bot checks"
     );
-    let done = flow::review(&hub, &task.id, "ada", true, "").unwrap();
+    let done = review(&hub, &task.id, "ada", true, "").unwrap();
     assert_eq!(done.status, TaskStatus::Done, "no branch: nothing to merge");
     assert!(claim(&hub, &task.id, "ada").await.unwrap_err().to_string().contains("only an open task"));
 }
@@ -126,7 +136,7 @@ async fn a_git_task_works_on_its_own_worktree_and_merges() {
     assert!(!project.join("b.txt").exists(), "the project's own checkout is untouched");
 
     assert_eq!(finish(&hub, &task.id, "ada", "Added b").await.unwrap().status, TaskStatus::Checking);
-    let review = flow::review(&hub, &task.id, "bo", true, "b.txt holds two").unwrap();
+    let review = review(&hub, &task.id, "bo", true, "b.txt holds two").unwrap();
     assert_eq!(review.status, TaskStatus::Review, "checked: waits for the user's merge");
     assert_eq!(review.notes.last().unwrap().text, "Checked: b.txt holds two");
 
@@ -147,7 +157,7 @@ async fn a_conflicting_merge_leaves_the_project_as_it_was() {
     std::fs::write(tree.join("a.txt"), "theirs\n").unwrap();
     git(&tree, &["commit", "-q", "-am", "theirs"]);
     finish(&hub, &task.id, "ada", "Changed a").await.unwrap();
-    flow::review(&hub, &task.id, "bo", true, "").unwrap();
+    review(&hub, &task.id, "bo", true, "").unwrap();
     std::fs::write(project.join("a.txt"), "ours\n").unwrap();
     git(&project, &["commit", "-q", "-am", "ours"]);
 
@@ -280,7 +290,14 @@ async fn a_coordinator_finishes_only_after_its_subtasks() {
 
     let closed = new_task(&hub, "Old", None);
     set_status(&hub, &closed.id, TaskStatus::Done).await.unwrap();
-    let orphan = NewTask { title: "Late", detail: "", project: None, parent: Some(&closed.id) };
+    let orphan = NewTask {
+        title: "Late",
+        detail: "",
+        project: None,
+        parent: Some(&closed.id),
+        acceptance: vec![],
+        approve_plan: false,
+    };
     assert!(create(&hub, Actor::User, &orphan).unwrap_err().to_string().contains("parent task is done"));
 }
 
@@ -291,9 +308,9 @@ async fn a_checker_sends_work_back_twice_at_most() {
     claim(&hub, &task.id, "ada").await.unwrap();
     for round in 1..=2 {
         finish(&hub, &task.id, "ada", "Wrote it").await.unwrap();
-        assert!(flow::review(&hub, &task.id, "ada", true, "").is_err(), "the claimer doesn't check its own work");
-        assert!(flow::review(&hub, &task.id, "bo", false, " ").unwrap_err().to_string().contains("what to fix"));
-        let back = flow::review(&hub, &task.id, "bo", false, "Step 3 is missing").unwrap();
+        assert!(review(&hub, &task.id, "ada", true, "").is_err(), "the claimer doesn't check its own work");
+        assert!(review(&hub, &task.id, "bo", false, " ").unwrap_err().to_string().contains("what to fix"));
+        let back = review(&hub, &task.id, "bo", false, "Step 3 is missing").unwrap();
         assert_eq!(
             (back.status, back.claimed_by.as_deref(), back.send_backs),
             (TaskStatus::Claimed, Some("ada"), round)
@@ -301,7 +318,8 @@ async fn a_checker_sends_work_back_twice_at_most() {
         assert_eq!(back.notes.last().unwrap().text, "Sent back: Step 3 is missing");
     }
     let done = finish(&hub, &task.id, "ada", "Added step 3").await.unwrap();
-    assert_eq!(done.status, TaskStatus::Done, "sent back twice: the next finish counts");
+    assert_eq!(done.status, TaskStatus::Review, "sent back twice: the user decides");
+    assert_eq!(done.notes.last().unwrap().text, "Sent back 2 times: you decide whether it is done.");
 
     // Their sheets count what each did, and a class sets where the abilities start.
     sheet::set_class(&hub, "bo", Some(sheet::BotClass::MartialArtist)).unwrap();
@@ -398,4 +416,93 @@ async fn the_lead_hands_a_subtask_to_a_teammate_by_name() {
     assert_eq!(told.unwrap_err().to_string(), "unknown bot");
     let api = list(&hub.store).into_iter().find(|t| t.title == "API").unwrap();
     assert_eq!((api.status, api.claimed_by.as_deref()), (TaskStatus::Claimed, Some(other)));
+}
+
+#[tokio::test]
+async fn the_user_approves_the_plan_before_any_work() {
+    let hub = hub();
+    let new = NewTask {
+        title: "Run the workshop",
+        detail: "",
+        project: None,
+        parent: None,
+        acceptance: vec![],
+        approve_plan: true,
+    };
+    let task = create(&hub, Actor::User, &new).unwrap();
+    assert_eq!(task.approval, brief::Approval::Waiting);
+    let lead = flow::plan(&hub, &task.id, false).unwrap()["botId"].as_str().unwrap().to_owned();
+    let prompt = flow::plan_prompt(&get(&hub.store, &task.id).unwrap(), false, "Teammates:");
+    assert!(prompt.contains(&format!("first propose_plan {}", task.id)), "{prompt}");
+
+    // No work before the plan is approved: no finish, no subtasks.
+    let early = finish(&hub, &task.id, &lead, "Did it").await.unwrap_err().to_string();
+    assert!(early.contains("propose_plan"), "{early}");
+    let part = NewTask { parent: Some(&task.id), approve_plan: false, ..new };
+    assert!(create(&hub, Actor::Bot(&lead), &part).is_err(), "a subtask waits for the approval");
+
+    // A plan needs criteria; the user asks for a change, then approves.
+    let bare = brief::propose(&hub, &task.id, &lead, "I do it", &Value::Null).unwrap_err().to_string();
+    assert!(bare.contains("add acceptance"), "{bare}");
+    let other = if lead == "ada" { "bo" } else { "ada" };
+    assert!(brief::propose(&hub, &task.id, other, "Mine", &json!(["x"])).is_err(), "only the claimer proposes");
+    let proposed =
+        brief::propose(&hub, &task.id, &lead, "Size: small, I do it", &json!("- Slides\n\n- Guide")).unwrap();
+    assert_eq!(
+        (proposed.approval, proposed.acceptance.clone()),
+        (brief::Approval::Proposed, vec!["Slides".to_owned(), "Guide".to_owned()])
+    );
+    assert!(brief::revise(&hub, &task.id, " ").is_err(), "say what to change");
+    let revised = brief::revise(&hub, &task.id, "Add a worksheet").unwrap();
+    assert_eq!(revised.approval, brief::Approval::Waiting);
+    assert_eq!(revised.notes.last().unwrap().text, "Change the plan: Add a worksheet");
+    assert!(brief::approve(&hub, &task.id).is_err(), "nothing proposed yet");
+    brief::propose(&hub, &task.id, &lead, "Slides, guide, worksheet", &Value::Null).unwrap();
+    let approved = brief::approve(&hub, &task.id).unwrap();
+    assert_eq!((approved.approval, approved.acceptance.len()), (brief::Approval::Approved, 2));
+    assert!(brief::work_order(&approved).contains("The plan the user approved:\nSlides, guide, worksheet"));
+    assert!(create(&hub, Actor::Bot(&lead), &part).is_ok(), "approved: the lead splits it");
+
+    // Reopened, the plan is proposed again.
+    let reopened = set_status(&hub, &task.id, TaskStatus::Open).await.unwrap();
+    assert_eq!((reopened.approval, reopened.plan), (brief::Approval::Waiting, None));
+}
+
+#[tokio::test]
+async fn a_check_marks_every_criterion_and_one_failure_sends_it_back() {
+    let hub = hub();
+    let new = NewTask {
+        title: "Write the guide",
+        detail: "",
+        project: None,
+        parent: None,
+        acceptance: vec!["Adds up to 180 minutes".into(), "Cantonese throughout".into()],
+        approve_plan: false,
+    };
+    let task = create(&hub, Actor::User, &new).unwrap();
+    claim(&hub, &task.id, "ada").await.unwrap();
+    finish(&hub, &task.id, "ada", "Wrote it").await.unwrap();
+    let check = |approve: Option<bool>, checks: Value| {
+        flow::review(&hub, &task.id, "bo", flow::Verdict { approve, checks: &checks, feedback: "" })
+    };
+    assert!(check(Some(true), Value::Null).unwrap_err().to_string().contains("checks is required"));
+    let partial = check(None, json!([{"criterion": 1, "pass": true}])).unwrap_err().to_string();
+    assert!(partial.contains("2 not checked"), "{partial}");
+    let silent = json!([{"criterion": 1, "pass": true}, {"criterion": 2, "pass": false}]);
+    assert!(check(None, silent).unwrap_err().to_string().contains("what fails criterion 2"));
+    let mixed = json!([{"criterion": 1, "pass": true}, {"criterion": 2, "pass": false, "note": "Part 3 is written"}]);
+    assert!(check(Some(true), mixed.clone()).unwrap_err().to_string().contains("approve must match"));
+    let back = check(None, mixed).unwrap();
+    assert_eq!((back.status, back.send_backs), (TaskStatus::Claimed, 1));
+    assert_eq!(back.notes.last().unwrap().text, "Sent back: - Cantonese throughout: Part 3 is written");
+    assert_eq!(back.checks.iter().map(|c| c.pass).collect::<Vec<_>>(), [true, false]);
+
+    finish(&hub, &task.id, "ada", "Rewrote part 3").await.unwrap();
+    let all = json!([{"criterion": 2, "pass": true}, {"criterion": 1, "pass": true, "note": "175 + 5"}]);
+    let done = check(None, all).unwrap();
+    assert_eq!(done.status, TaskStatus::Done);
+    assert_eq!(
+        done.checks[0],
+        brief::Check { criterion: "Adds up to 180 minutes".into(), pass: true, note: "175 + 5".into() }
+    );
 }

@@ -1,5 +1,5 @@
 //! The team board's methods for the apps: `tasks` (with the bots turned off from claiming), `createTask`, `editTask`,
-//! `noteTask`, `assignTask`, `setTaskStatus`, `mergeTask`, `deleteTask`, `setBoardClaims`, `splitGoal`, `botSheets` and `setBotClass`. Task
+//! `noteTask`, `assignTask`, `setTaskStatus`, `mergeTask`, `deleteTask`, `approvePlan`, `revisePlan`, `setBoardClaims`, `splitGoal`, `botSheets` and `setBotClass`. Task
 //! changes reach every client as `task` events.
 
 use super::str_arg;
@@ -35,6 +35,9 @@ pub(super) async fn call(hub: &Arc<Hub>, method: &str, b: Value) -> Result<Contr
                 detail: b["detail"].as_str().unwrap_or_default(),
                 project: b["project"].as_str(),
                 parent: None,
+                acceptance: board::brief::criteria(&b["acceptance"])?,
+                // The user approves the plan before any work unless they turn it off.
+                approve_plan: b["approvePlan"].as_bool().unwrap_or(true),
             };
             let task = board::create(hub, Actor::User, &new)?;
             // The lead plans it: splits it into subtasks, takes it, or leaves it for a better-fitting bot. With no bot
@@ -45,6 +48,8 @@ pub(super) async fn call(hub: &Arc<Hub>, method: &str, b: Value) -> Result<Contr
             board::get(&hub.store, &task.id)?
         }
         "editTask" => board::edit(hub, str_arg(&b, "taskId")?, b["title"].as_str(), b["detail"].as_str())?,
+        "approvePlan" => board::brief::approve(hub, str_arg(&b, "taskId")?)?,
+        "revisePlan" => board::brief::revise(hub, str_arg(&b, "taskId")?, str_arg(&b, "note")?)?,
         "noteTask" => board::note(hub, str_arg(&b, "taskId")?, Actor::User, str_arg(&b, "text")?)?,
         "assignTask" => board::assign(hub, str_arg(&b, "taskId")?, str_arg(&b, "botId")?, Actor::User).await?,
         "setTaskStatus" => {

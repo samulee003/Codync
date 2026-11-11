@@ -175,15 +175,24 @@ fn call_event(method: &str, b: &Value, p: &mut Map<String, Value>) -> Option<Eve
         }
         // The team board (`board`): what changed and who changed it, never a task's text.
         "createTask" | "editTask" | "noteTask" | "assignTask" | "setTaskStatus" | "mergeTask" | "deleteTask"
-        | "splitGoal" | "setBotClass" => {
+        | "splitGoal" | "setBotClass" | "approvePlan" | "revisePlan" => {
             let action = match method {
                 "setBotClass" => Some("class"),
+                "approvePlan" => Some("approve_plan"),
+                "revisePlan" => Some("revise_plan"),
                 "setTaskStatus" => b["status"].as_str().filter(|s| matches!(*s, "open" | "done" | "cancelled")),
                 "splitGoal" => Some("split"),
                 other => other.strip_suffix("Task"),
             };
             p.insert("action".into(), action.unwrap_or("other").into());
             p.insert("by".into(), "user".into());
+            // A new task's work order: whether it came with criteria, and whether its plan is approved first.
+            if method == "createTask" {
+                let criteria = b["acceptance"].as_array().is_some_and(|a| !a.is_empty())
+                    || b["acceptance"].as_str().is_some_and(|s| !s.trim().is_empty());
+                p.insert("criteria".into(), criteria.into());
+                p.insert("approvePlan".into(), b["approvePlan"].as_bool().unwrap_or(true).into());
+            }
             Event::TaskChanged
         }
         "teamCall"
@@ -192,11 +201,19 @@ fn call_event(method: &str, b: &Value, p: &mut Map<String, Value>) -> Option<Eve
             }) =>
         {
             let name = b["name"].as_str().unwrap_or_default();
-            p.insert("action".into(), name.strip_suffix("_task").unwrap_or("other").into());
+            p.insert("action".into(), name.strip_suffix("_task").unwrap_or(name).into());
             p.insert("by".into(), "bot".into());
             // A check's outcome: accepted or sent back.
-            if let Some(approve) = b["arguments"]["approve"].as_bool().filter(|_| name == "review_task") {
-                p.insert("approved".into(), approve.into());
+            if name == "review_task" {
+                let args = &b["arguments"];
+                let approve = match args["checks"].as_array() {
+                    Some(checks) => Some(checks.iter().all(|c| c["pass"].as_bool() == Some(true))),
+                    None => args["approve"].as_bool(),
+                };
+                if let Some(approve) = approve {
+                    p.insert("approved".into(), approve.into());
+                }
+                p.insert("criteria".into(), args["checks"].as_array().map_or(0, Vec::len).into());
             }
             Event::TaskChanged
         }

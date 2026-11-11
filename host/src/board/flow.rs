@@ -2,6 +2,7 @@
 //! job with parts others can do side by side into subtasks it then coordinates), another bot checks finished work
 //! before it counts, and a coordinator hears when all its subtasks are finished so it assembles the result.
 
+use super::brief;
 use super::sheet::{self, BotClass, Deed};
 use super::{MAX_NOTE, MAX_NOTES, Note, Task, TaskStatus, change, children, dispatch, get, take, text, wire};
 use crate::LockExt;
@@ -75,8 +76,8 @@ pub(super) fn plan_prompt(task: &Task, split: bool, teammates: &str) -> String {
          minutes: then don't split, since every part costs a turn and a check. Do it yourself when it fits you, or \
          release_task {id} naming the teammate who fits it best. Large: it has independent parts that each take real \
          work (about 10 minutes or more), or that need different strengths: split it into those parts and coordinate. \
-         A subtask is create_task with parentId {id}: self-contained (what to do, where, how to check it is done), one \
-         bot's work, and handed to the teammate who fits it best with assignee (by class and what is left of their \
+         A subtask is create_task with parentId {id}: self-contained (what to do, where), with acceptance criteria the \
+         check marks pass or fail, one bot's work, and handed to the teammate who fits it best with assignee (by class and what is left of their \
          plan); leave assignee out only if anyone can do it. Order parts that build on others: say in a part's detail \
          what it waits for. Don't do the subtasks yourself: you will be told when they are all finished; then check \
          and assemble their results into the task's result and finish_task {id}. Tell the user in a few lines how you \
@@ -86,6 +87,7 @@ pub(super) fn plan_prompt(task: &Task, split: bool, teammates: &str) -> String {
     if !task.detail.is_empty() {
         let _ = write!(prompt, "\n\n{}", task.detail);
     }
+    prompt.push_str(&brief::work_order(task));
     let _ = write!(prompt, "\n\n{teammates}");
     prompt
 }
@@ -116,10 +118,11 @@ pub(super) fn teammates(hub: &Hub, except: &str) -> String {
 }
 
 /// The checker's verdict on a task it checks: accepted, it settles; sent back, the claimer gets it again with the
-/// feedback as a note.
-pub fn review(hub: &Hub, id: &str, bot: &str, approve: bool, feedback: &str) -> Result<Task> {
-    let feedback = text(feedback, "feedback", MAX_NOTE)?;
-    ensure!(approve || !feedback.is_empty(), "say what to fix in feedback when you send a task back");
+/// feedback as a note. A task with acceptance criteria is judged criterion by criterion (`brief::checks`): it is
+/// accepted only when every one passes.
+pub fn review(hub: &Hub, id: &str, bot: &str, verdict: Verdict<'_>) -> Result<Task> {
+    let feedback = text(verdict.feedback, "feedback", MAX_NOTE)?;
+    let mut approve = verdict.approve;
     let task = change(hub, id, |task| {
         ensure!(
             task.status == TaskStatus::Checking,
@@ -127,9 +130,31 @@ pub fn review(hub: &Hub, id: &str, bot: &str, approve: bool, feedback: &str) -> 
             wire(task.status)
         );
         ensure!(task.reviewer.as_deref() == Some(bot), "another bot checks this task");
-        if !feedback.is_empty() {
+        if task.acceptance.is_empty() {
+            task.checks.clear();
+        } else {
+            let (checks, passed) = brief::checks(task, verdict.checks)?;
+            ensure!(
+                approve.is_none_or(|a| a == passed),
+                "approve must match your checks: the task is accepted only when every criterion passes"
+            );
+            approve = Some(passed);
+            task.checks = checks;
+        }
+        let approve = approve.ok_or_else(|| anyhow::anyhow!("approve is required"))?;
+        let failed = brief::failures(&task.checks);
+        ensure!(
+            approve || !feedback.is_empty() || !failed.is_empty(),
+            "say what to fix in feedback when you send a task back"
+        );
+        let said = format!("{feedback}{failed}");
+        if !said.trim().is_empty() {
             let verdict = if approve { "Checked" } else { "Sent back" };
-            task.notes.push(Note { by: Some(bot.to_owned()), text: format!("{verdict}: {feedback}"), at: now_ms() });
+            task.notes.push(Note {
+                by: Some(bot.to_owned()),
+                text: format!("{verdict}: {}", said.trim()),
+                at: now_ms(),
+            });
             let over = task.notes.len().saturating_sub(MAX_NOTES);
             task.notes.drain(..over);
         }
@@ -141,6 +166,8 @@ pub fn review(hub: &Hub, id: &str, bot: &str, approve: bool, feedback: &str) -> 
         }
         Ok(())
     })?;
+    let approve = matches!(task.status, TaskStatus::Review | TaskStatus::Done);
+    let feedback = format!("{feedback}{}", brief::failures(&task.checks));
     sheet::record(hub, bot, Deed::Checked { caught: !approve });
     if approve {
         accepted(hub, &task);
@@ -160,6 +187,14 @@ pub fn review(hub: &Hub, id: &str, bot: &str, approve: bool, feedback: &str) -> 
     Ok(task)
 }
 
+/// A checker's answer: per-criterion checks (for a task with acceptance criteria), whether it approves, and feedback.
+#[derive(Clone, Copy)]
+pub struct Verdict<'a> {
+    pub approve: Option<bool>,
+    pub checks: &'a Value,
+    pub feedback: &'a str,
+}
+
 /// A bot finished a task: its checker is told to check it, or (no check) its coordinator may be ready.
 pub(super) fn after_finish(hub: &Hub, task: &Task) {
     match (&task.status, &task.reviewer, &task.claimed_by) {
@@ -171,10 +206,18 @@ pub(super) fn after_finish(hub: &Hub, task: &Task) {
                 format!(
                     "[Codync: {name} finished task {id} on the team board, and you check it before it counts as done. \
                      read_task {id}, then look at the result itself (open the files, run it, compare it with what the \
-                     task asked). If it does what was asked and works, review_task with approve true; otherwise \
-                     approve false, with feedback saying exactly what to fix. Don't fix it yourself.]\n\nTask: {}",
+                     task asked). {how} Don't fix it yourself.]\n\nTask: {}{}",
                     task.title,
-                    id = task.id
+                    brief::work_order(task),
+                    id = task.id,
+                    how = if task.acceptance.is_empty() {
+                        "If it does what was asked and works, review_task with approve true; otherwise approve false, \
+                         with feedback saying exactly what to fix."
+                    } else {
+                        "Judge it against each acceptance criterion, strictly: review_task with checks, one {criterion: \
+                         its number, pass, note} for every criterion; it is accepted only when all pass, and a criterion \
+                         you have doubts about fails, with a note saying what to fix."
+                    }
                 ),
             );
         }
