@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { boardColumns, taskActions, taskByline, type BoardTask, type TaskAction } from '@shared/board'
+import { awaitsApproval, boardColumns, taskActions, taskByline, type BoardTask, type TaskAction } from '@shared/board'
 import { DropdownMenu, Reveal } from '../../components/Controls'
 import { BotAvatar } from '../../components/Avatar'
 import { Icon } from '../../components/Icon'
@@ -13,6 +13,7 @@ import { useScreenViewed } from '../../store/analytics'
 import { useStore } from '../../store/context'
 import type { BotStore } from '../../store/bot-store'
 import { BoardMembers, NewTaskForm, SplitGoalForm } from './BoardForms'
+import { TaskWorkOrder } from './TaskWorkOrder'
 import './board.css'
 
 /**
@@ -88,7 +89,7 @@ const STATUS_ICON: Record<BoardTask['status'], string> = {
 function TaskRow({ task, run }: { task: BoardTask; run: (work: Promise<unknown>) => void }) {
   const tr = useTr()
   const store = useStore()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(awaitsApproval(task))
   const [note, setNote] = useState('')
   const byline = taskByline(task, {
     name: (bot) => store.bots.get(bot)?.name ?? bot,
@@ -118,6 +119,7 @@ function TaskRow({ task, run }: { task: BoardTask; run: (work: Promise<unknown>)
       <Reveal show={open}>
         <VStack gap={8} className="board-task-detail">
           {task.detail ? <Text size="callout" className="board-text">{task.detail}</Text> : null}
+          <TaskWorkOrder task={task} run={run} />
           {task.project ? <Text size="caption" tone="secondary" mono truncate>{task.worktree ?? task.project}</Text> : null}
           {task.summary ? <Text size="callout" className="board-text">{task.summary}</Text> : null}
           {task.notes.map((n) => (

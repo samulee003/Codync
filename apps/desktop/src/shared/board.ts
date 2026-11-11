@@ -10,6 +10,16 @@ export interface TaskNote {
   at: number
 }
 
+/** Whether the user approves the claimer's plan before work starts. */
+export type PlanApproval = 'notNeeded' | 'waiting' | 'proposed' | 'approved'
+
+/** The checker's verdict on one acceptance criterion. */
+export interface CriterionCheck {
+  criterion: string
+  pass: boolean
+  note: string
+}
+
 export interface BoardTask {
   id: string
   title: string
@@ -28,14 +38,25 @@ export interface BoardTask {
   parent?: string | null
   /** The bot that checks (or checked) the finished work. */
   reviewer?: string | null
+  /** What must hold for the result to count as done; the checker marks each pass or fail. */
+  acceptance?: string[]
+  /** The plan its claimer proposed for the user's approval. */
+  plan?: string | null
+  approval?: PlanApproval
+  /** The latest check, criterion by criterion. */
+  checks?: CriterionCheck[]
   createdAt: number
   updatedAt: number
   rev: number
   deleted?: boolean
 }
 
+/** A board column: a status, or the plans waiting for the user's approval (claimed tasks, shown first). */
+export type BoardColumn = TaskStatus | 'plan'
+
 /** The board's columns, in the order they show. */
-export const TASK_COLUMNS: { status: TaskStatus; title: string }[] = [
+export const TASK_COLUMNS: { status: BoardColumn; title: string }[] = [
+  { status: 'plan', title: 'Plans to approve' },
   { status: 'open', title: 'Open' },
   { status: 'claimed', title: 'In progress' },
   { status: 'checking', title: 'Being checked' },
@@ -44,10 +65,31 @@ export const TASK_COLUMNS: { status: TaskStatus; title: string }[] = [
   { status: 'cancelled', title: 'Cancelled' },
 ]
 
-/** Tasks by status, each column newest first. */
-export function boardColumns(tasks: Iterable<BoardTask>): { status: TaskStatus; title: string; tasks: BoardTask[] }[] {
+/** Whether a task's plan waits for the user's approval. */
+export function awaitsApproval(task: Pick<BoardTask, 'status' | 'approval'>): boolean {
+  return task.status === 'claimed' && task.approval === 'proposed'
+}
+
+/** The column a task shows in. */
+export function taskColumn(task: Pick<BoardTask, 'status' | 'approval'>): BoardColumn {
+  return awaitsApproval(task) ? 'plan' : task.status
+}
+
+/** Tasks by column, each newest first. */
+export function boardColumns(tasks: Iterable<BoardTask>): { status: BoardColumn; title: string; tasks: BoardTask[] }[] {
   const live = [...tasks].filter((t) => !t.deleted).sort((a, b) => b.updatedAt - a.updatedAt)
-  return TASK_COLUMNS.map((column) => ({ ...column, tasks: live.filter((t) => t.status === column.status) }))
+  return TASK_COLUMNS.map((column) => ({ ...column, tasks: live.filter((t) => taskColumn(t) === column.status) }))
+}
+
+/** Acceptance criteria typed one per line: trimmed, list marks dropped, blank lines left out. */
+export function parseCriteria(text: string): string[] {
+  return text.split('\n').map((line) => line.replace(/^[\s\-*•]+/, '').trim()).filter(Boolean)
+}
+
+/** Each criterion with its verdict from the latest check, if it was checked. */
+export function criteriaWithChecks(task: Pick<BoardTask, 'acceptance' | 'checks'>): { criterion: string; check?: CriterionCheck }[] {
+  const checks = task.checks ?? []
+  return (task.acceptance ?? []).map((criterion) => ({ criterion, check: checks.find((c) => c.criterion === criterion) }))
 }
 
 /** What the user can do with a task in its status. */
@@ -73,6 +115,7 @@ export function taskByline(
   const parent = task.parent ? parentTitle(task.parent) : undefined
   return [
     task.claimedBy ? name(task.claimedBy) : null,
+    awaitsApproval(task) ? tr('Plan waits for you') : null,
     task.status === 'checking' && task.reviewer ? tr('Checked by {name}').replace('{name}', name(task.reviewer)) : null,
     parent ? `↳ ${parent}` : null,
     task.branch,

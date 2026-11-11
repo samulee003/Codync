@@ -1979,5 +1979,18 @@
   "Leads, coordinates and assembles": "Dirige, coordina y une",
   "Steady, well-defined tasks": "Tareas constantes y bien definidas",
   "Promoted at Lv {level}": "Asciende en Nv {level}",
-  "A class sets where abilities start; they grow with what the bot does on the team board, and the class is promoted at Lv 5 and Lv 10.": "La clase fija los valores iniciales; crecen con lo que el bot hace en el tablero del equipo, y asciende en Nv 5 y Nv 10."
+  "A class sets where abilities start; they grow with what the bot does on the team board, and the class is promoted at Lv 5 and Lv 10.": "La clase fija los valores iniciales; crecen con lo que el bot hace en el tablero del equipo, y asciende en Nv 5 y Nv 10.",
+  "Plans to approve": "Planes por aprobar",
+  "Plan waits for you": "El plan te espera",
+  "Acceptance criteria": "Criterios de aceptación",
+  "Passed": "Aprobado",
+  "Not checked yet": "Aún sin revisar",
+  "Approved plan": "Plan aprobado",
+  "Proposed plan": "Plan propuesto",
+  "What to change in the plan": "Qué cambiar en el plan",
+  "Ask for changes": "Pedir cambios",
+  "Approve plan": "Aprobar plan",
+  "What to do: the result, the materials to use, and what not to do": "Qué hacer: el resultado, los materiales a usar y lo que no se debe hacer",
+  "Acceptance criteria, one per line: what must hold for it to count as done": "Criterios de aceptación, uno por línea: lo que debe cumplirse para darlo por hecho",
+  "Approve the plan before work starts": "Aprobar el plan antes de empezar"
 }

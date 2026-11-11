@@ -1979,5 +1979,18 @@
   "Leads, coordinates and assembles": "Руководит, координирует и собирает",
   "Steady, well-defined tasks": "Чёткие, понятные задачи",
   "Promoted at Lv {level}": "Повышение на ур. {level}",
-  "A class sets where abilities start; they grow with what the bot does on the team board, and the class is promoted at Lv 5 and Lv 10.": "Класс задаёт начальные значения; они растут от работы бота на командной доске, а на ур. 5 и 10 класс повышается."
+  "A class sets where abilities start; they grow with what the bot does on the team board, and the class is promoted at Lv 5 and Lv 10.": "Класс задаёт начальные значения; они растут от работы бота на командной доске, а на ур. 5 и 10 класс повышается.",
+  "Plans to approve": "Планы на утверждение",
+  "Plan waits for you": "План ждёт вас",
+  "Acceptance criteria": "Критерии приёмки",
+  "Passed": "Пройдено",
+  "Not checked yet": "Ещё не проверено",
+  "Approved plan": "Утверждённый план",
+  "Proposed plan": "Предложенный план",
+  "What to change in the plan": "Что изменить в плане",
+  "Ask for changes": "Попросить изменить",
+  "Approve plan": "Утвердить план",
+  "What to do: the result, the materials to use, and what not to do": "Что сделать: результат, какие материалы использовать и чего не делать",
+  "Acceptance criteria, one per line: what must hold for it to count as done": "Критерии приёмки, по одному в строке: что должно выполняться, чтобы считать готовым",
+  "Approve the plan before work starts": "Утверждать план до начала работы"
 }

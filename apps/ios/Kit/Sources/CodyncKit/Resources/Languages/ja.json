@@ -1979,5 +1979,18 @@
   "Leads, coordinates and assembles": "率いて調整し、まとめる",
   "Steady, well-defined tasks": "着実で明確なタスク",
   "Promoted at Lv {level}": "Lv {level} で転職",
-  "A class sets where abilities start; they grow with what the bot does on the team board, and the class is promoted at Lv 5 and Lv 10.": "兵種で初期値が決まり、チームボードでの働きに応じて成長します。Lv 5 と Lv 10 で転職します。"
+  "A class sets where abilities start; they grow with what the bot does on the team board, and the class is promoted at Lv 5 and Lv 10.": "兵種で初期値が決まり、チームボードでの働きに応じて成長します。Lv 5 と Lv 10 で転職します。",
+  "Plans to approve": "承認待ちの計画",
+  "Plan waits for you": "計画があなたの承認待ち",
+  "Acceptance criteria": "受け入れ基準",
+  "Passed": "合格",
+  "Not checked yet": "未チェック",
+  "Approved plan": "承認済みの計画",
+  "Proposed plan": "提案された計画",
+  "What to change in the plan": "計画の変更点",
+  "Ask for changes": "変更を依頼",
+  "Approve plan": "計画を承認",
+  "What to do: the result, the materials to use, and what not to do": "やること：成果物、使う資料、してはいけないこと",
+  "Acceptance criteria, one per line: what must hold for it to count as done": "受け入れ基準（1 行に 1 つ）：完了とみなす条件",
+  "Approve the plan before work starts": "作業前に計画を承認"
 }

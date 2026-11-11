@@ -1979,5 +1979,18 @@
   "Leads, coordinates and assembles": "统领、协调并整合",
   "Steady, well-defined tasks": "稳定、明确的任务",
   "Promoted at Lv {level}": "Lv {level} 转职",
-  "A class sets where abilities start; they grow with what the bot does on the team board, and the class is promoted at Lv 5 and Lv 10.": "兵种决定能力的起始值，之后随 bot 在团队任务板上的表现成长，Lv 5 和 Lv 10 时转职。"
+  "A class sets where abilities start; they grow with what the bot does on the team board, and the class is promoted at Lv 5 and Lv 10.": "兵种决定能力的起始值，之后随 bot 在团队任务板上的表现成长，Lv 5 和 Lv 10 时转职。",
+  "Plans to approve": "待批准的计划",
+  "Plan waits for you": "计划等你批准",
+  "Acceptance criteria": "验收标准",
+  "Passed": "通过",
+  "Not checked yet": "尚未检查",
+  "Approved plan": "已批准的计划",
+  "Proposed plan": "提出的计划",
+  "What to change in the plan": "计划要改什么",
+  "Ask for changes": "要求修改",
+  "Approve plan": "批准计划",
+  "What to do: the result, the materials to use, and what not to do": "要做什么：成品、要用的材料、不可以做的事",
+  "Acceptance criteria, one per line: what must hold for it to count as done": "验收标准，每行一项：要符合什么才算完成",
+  "Approve the plan before work starts": "开工前先批准计划"
 }

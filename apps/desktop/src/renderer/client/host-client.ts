@@ -197,8 +197,16 @@ export class HostClient {
     return this.call('splitGoal', { goal })
   }
 
-  createTask(title: string, detail: string, project: string | null): Promise<{ task: BoardTask }> {
-    return this.call('createTask', { title, detail, ...(project ? { project } : {}) })
+  createTask(title: string, detail: string, project: string | null, acceptance: string[], approvePlan: boolean): Promise<{ task: BoardTask }> {
+    return this.call('createTask', { title, detail, acceptance, approvePlan, ...(project ? { project } : {}) })
+  }
+
+  approvePlan(taskId: string): Promise<{ task: BoardTask }> {
+    return this.call('approvePlan', { taskId })
+  }
+
+  revisePlan(taskId: string, note: string): Promise<{ task: BoardTask }> {
+    return this.call('revisePlan', { taskId, note })
   }
 
   noteTask(taskId: string, text: string): Promise<{ task: BoardTask }> {

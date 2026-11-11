@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon'
 import { Sheet } from '../../components/Overlay'
 import { HStack, VStack } from '../../components/Stack'
 import { Text } from '../../components/Text'
+import { parseCriteria } from '@shared/board'
 import { isGroup } from '@shared/models'
 import { useTr } from '../../lib/use-language'
 import { useStore } from '../../store/context'
@@ -11,19 +12,25 @@ import { FolderPicker } from '../bots/FolderPicker'
 
 type Run = (work: Promise<unknown>) => void
 
-/** A new task: its title, what to do, and the folder it's in, picked like a bot's workspace. */
+/**
+ * A new task as a work order: its title, what to do, the acceptance criteria the check holds it to, whether its plan
+ * waits for the user's approval before any work, and the folder it's in, picked like a bot's workspace.
+ */
 export function NewTaskForm({ done, run }: { done: () => void; run: Run }) {
   const tr = useTr()
   const store = useStore()
   const [title, setTitle] = useState('')
   const [detail, setDetail] = useState('')
+  const [criteria, setCriteria] = useState('')
+  const [approvePlan, setApprovePlan] = useState(true)
   const [project, setProject] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
   const add = () => {
     if (!title.trim()) return
-    run(store.board.create(store.client, title, detail, project).then(() => {
+    run(store.board.create(store.client, title, detail, project, parseCriteria(criteria), approvePlan).then(() => {
       setTitle('')
       setDetail('')
+      setCriteria('')
       setProject(null)
       done()
     }))
@@ -32,7 +39,12 @@ export function NewTaskForm({ done, run }: { done: () => void; run: Run }) {
     <VStack gap={8} className="outlined-card board-form">
       <input className="board-input" autoFocus maxLength={200} value={title} placeholder={tr('Task title')} aria-label={tr('Task title')}
         onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
-      <textarea className="board-input" value={detail} placeholder={tr('What to do, and how to check it is done')} onChange={(e) => setDetail(e.target.value)} />
+      <textarea className="board-input" value={detail} placeholder={tr('What to do: the result, the materials to use, and what not to do')} onChange={(e) => setDetail(e.target.value)} />
+      <textarea className="board-input" value={criteria} placeholder={tr('Acceptance criteria, one per line: what must hold for it to count as done')}
+        aria-label={tr('Acceptance criteria')} onChange={(e) => setCriteria(e.target.value)} />
+      <Switch on={approvePlan} onChange={setApprovePlan} label="Approve the plan before work starts">
+        <Text size="callout">{tr('Approve the plan before work starts')}</Text>
+      </Switch>
       <HStack gap={8}>
         <button className="board-input board-folder" onClick={() => setPicking(true)}>
           <Icon name="folder" size={14} color="var(--secondary)" />

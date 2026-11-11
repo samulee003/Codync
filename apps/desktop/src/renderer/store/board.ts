@@ -37,8 +37,18 @@ export class Board {
     return (await connected(client).splitGoal(goal)).name
   }
 
-  async create(client: HostClient | null, title: string, detail: string, project: string | null) {
-    this.upsert((await connected(client).createTask(title, detail, project)).task)
+  /** A new task with its acceptance criteria; `approvePlan`: its claimer's plan waits for the user first. */
+  async create(client: HostClient | null, title: string, detail: string, project: string | null, acceptance: string[], approvePlan: boolean) {
+    this.upsert((await connected(client).createTask(title, detail, project, acceptance, approvePlan)).task)
+  }
+
+  async approvePlan(client: HostClient | null, id: string) {
+    this.upsert((await connected(client).approvePlan(id)).task)
+  }
+
+  /** Sends a proposed plan back with what to change. */
+  async revisePlan(client: HostClient | null, id: string, note: string) {
+    this.upsert((await connected(client).revisePlan(id, note)).task)
   }
 
   async note(client: HostClient | null, id: string, text: string) {

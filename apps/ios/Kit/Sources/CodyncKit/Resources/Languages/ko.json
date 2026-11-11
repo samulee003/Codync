@@ -1979,5 +1979,18 @@
   "Leads, coordinates and assembles": "이끌고 조율하며 결과를 모읍니다",
   "Steady, well-defined tasks": "꾸준하고 명확한 작업",
   "Promoted at Lv {level}": "Lv {level}에 전직",
-  "A class sets where abilities start; they grow with what the bot does on the team board, and the class is promoted at Lv 5 and Lv 10.": "병종이 초기 능력치를 정하고, 팀 보드에서 한 일에 따라 성장하며, Lv 5와 Lv 10에서 전직합니다."
+  "A class sets where abilities start; they grow with what the bot does on the team board, and the class is promoted at Lv 5 and Lv 10.": "병종이 초기 능력치를 정하고, 팀 보드에서 한 일에 따라 성장하며, Lv 5와 Lv 10에서 전직합니다.",
+  "Plans to approve": "승인 대기 계획",
+  "Plan waits for you": "계획이 승인을 기다림",
+  "Acceptance criteria": "수락 기준",
+  "Passed": "통과",
+  "Not checked yet": "아직 확인 안 됨",
+  "Approved plan": "승인된 계획",
+  "Proposed plan": "제안된 계획",
+  "What to change in the plan": "계획에서 바꿀 점",
+  "Ask for changes": "변경 요청",
+  "Approve plan": "계획 승인",
+  "What to do: the result, the materials to use, and what not to do": "할 일: 결과물, 사용할 자료, 하지 말아야 할 것",
+  "Acceptance criteria, one per line: what must hold for it to count as done": "수락 기준, 한 줄에 하나: 완료로 볼 조건",
+  "Approve the plan before work starts": "작업 전에 계획 승인"
 }
