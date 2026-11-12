@@ -1,4 +1,4 @@
-import { newerTask, type BoardTask, type TaskStatus } from '@shared/board'
+import { newerTask, type BoardTask, type TaskStatus, type TaskTemplate } from '@shared/board'
 import type { HostClient } from '../client/host-client'
 import { trNow } from '../lib/l10n.ts'
 
@@ -10,6 +10,8 @@ export class Board {
   readonly byId = new Map<string, BoardTask>()
   /** Bots the user turned off from claiming open tasks on their own; the rest take part. */
   optedOut = new Set<string>()
+  /** The saved task templates, for filling the new-task form. */
+  templates: TaskTemplate[] = []
   private changed: () => void
   constructor(changed: () => void) { this.changed = changed }
 
@@ -24,6 +26,7 @@ export class Board {
     const { tasks, optedOut } = await connected(client).tasks()
     for (const task of tasks) this.upsert(task)
     this.optedOut = new Set(optedOut ?? [])
+    this.templates = await loadTemplates(client)
     this.changed()
   }
 
@@ -51,6 +54,23 @@ export class Board {
     this.upsert((await connected(client).revisePlan(id, note)).task)
   }
 
+  /** The user's answers to the questions a claimed task asked before planning, one per question, in order. */
+  async answerQuestions(client: HostClient | null, id: string, answers: string[]) {
+    this.upsert((await connected(client).answerQuestions(id, answers)).task)
+  }
+
+  async saveTemplate(client: HostClient | null, taskId: string, name?: string) {
+    const { template } = await connected(client).saveTaskTemplate(taskId, name)
+    this.templates = [...this.templates.filter((t) => t.id !== template.id), template]
+    this.changed()
+  }
+
+  async deleteTemplate(client: HostClient | null, templateId: string) {
+    await connected(client).deleteTaskTemplate(templateId)
+    this.templates = this.templates.filter((t) => t.id !== templateId)
+    this.changed()
+  }
+
   async note(client: HostClient | null, id: string, text: string) {
     this.upsert((await connected(client).noteTask(id, text)).task)
   }
@@ -71,6 +91,15 @@ export class Board {
     await connected(client).deleteTask(id)
     this.byId.delete(id)
     this.changed()
+  }
+}
+
+/** Hosts before task templates have no such method: the board still loads, without templates. */
+async function loadTemplates(client: HostClient | null): Promise<TaskTemplate[]> {
+  try {
+    return (await connected(client).taskTemplates()).templates
+  } catch {
+    return []
   }
 }
 

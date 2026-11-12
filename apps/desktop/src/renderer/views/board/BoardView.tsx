@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { awaitsApproval, boardColumns, taskActions, taskByline, type BoardTask, type TaskAction } from '@shared/board'
+import { boardColumns, needsUser, taskActions, taskByline, taskEffort, type BoardTask, type TaskAction } from '@shared/board'
 import { DropdownMenu, Reveal } from '../../components/Controls'
 import { BotAvatar } from '../../components/Avatar'
 import { Icon } from '../../components/Icon'
@@ -89,13 +89,14 @@ const STATUS_ICON: Record<BoardTask['status'], string> = {
 function TaskRow({ task, run }: { task: BoardTask; run: (work: Promise<unknown>) => void }) {
   const tr = useTr()
   const store = useStore()
-  const [open, setOpen] = useState(awaitsApproval(task))
+  const [open, setOpen] = useState(needsUser(task))
   const [note, setNote] = useState('')
   const byline = taskByline(task, {
     name: (bot) => store.bots.get(bot)?.name ?? bot,
     find: (id) => store.board.byId.get(id),
     tr,
   })
+  const effort = taskEffort(task)
   const addNote = () => {
     if (!note.trim()) return
     run(store.board.note(store.client, task.id, note).then(() => setNote('')))
@@ -121,6 +122,7 @@ function TaskRow({ task, run }: { task: BoardTask; run: (work: Promise<unknown>)
           {task.detail ? <Text size="callout" className="board-text">{task.detail}</Text> : null}
           <TaskWorkOrder task={task} run={run} />
           {task.project ? <Text size="caption" tone="secondary" mono truncate>{task.worktree ?? task.project}</Text> : null}
+          {effort ? <Text size="caption" tone="secondary">{tr('{turns} turns · {minutes} min').replace('{turns}', String(effort.turns)).replace('{minutes}', String(effort.minutes))}</Text> : null}
           {task.summary ? <Text size="callout" className="board-text">{task.summary}</Text> : null}
           {task.notes.map((n) => (
             <Text key={n.at} size="callout" tone="secondary" className="board-text">
@@ -153,7 +155,7 @@ function menuItems(task: BoardTask, store: BotStore, tr: (text: string) => strin
     cancel: () => board.setStatus(store.client, task.id, 'cancelled'),
     delete: () => board.delete(store.client, task.id),
   }
-  return taskActions(task).flatMap((action): MenuItem[] => {
+  const actions = taskActions(task).flatMap((action): MenuItem[] => {
     if (action === 'assign') {
       return [...store.bots.values()].filter((b) => !b.hidden && !isGroup(b)).map((bot) => ({
         title: tr('Assign to {name}').replace('{name}', bot.name),
@@ -165,6 +167,9 @@ function menuItems(task: BoardTask, store: BotStore, tr: (text: string) => strin
     const { title, icon, destructive } = ACTION[action]
     return [{ title, icon, destructive, action: () => run(perform[action]()) }]
   })
+  const save: MenuItem = { title: tr('Save as template'), icon: 'square.and.arrow.down', action: () => run(board.saveTemplate(store.client, task.id)) }
+  const destructive = actions.filter((item) => item.destructive)
+  return [...actions.filter((item) => !item.destructive), save, ...destructive]
 }
 
 function message(e: unknown) {

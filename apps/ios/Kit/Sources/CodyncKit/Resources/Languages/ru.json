@@ -1994,5 +1994,14 @@
   "Acceptance criteria, one per line: what must hold for it to count as done": "Критерии приёмки, по одному в строке: что должно выполняться, чтобы считать готовым",
   "Approve the plan before work starts": "Утверждать план до начала работы",
   "Waits for {titles}": "Ждёт: {titles}",
-  "For {name}": "Для {name}"
+  "For {name}": "Для {name}",
+  "Waiting for you": "Ждёт вас",
+  "Has questions for you": "Есть вопросы к вам",
+  "Questions for you": "Вопросы к вам",
+  "Your answer": "Ваш ответ",
+  "Send answers": "Отправить ответы",
+  "{turns} turns · {minutes} min": "{turns} ходов · {minutes} мин",
+  "Save as template": "Сохранить как шаблон",
+  "Template": "Шаблон",
+  "Delete template: {name}": "Удалить шаблон: {name}"
 }

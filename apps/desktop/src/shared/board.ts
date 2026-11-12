@@ -10,8 +10,25 @@ export interface TaskNote {
   at: number
 }
 
-/** Whether the user approves the claimer's plan before work starts. */
-export type PlanApproval = 'notNeeded' | 'waiting' | 'proposed' | 'approved'
+/** Whether the user approves the claimer's plan before work starts; `asking`: the bot has questions before it plans. */
+export type PlanApproval = 'notNeeded' | 'waiting' | 'proposed' | 'approved' | 'asking'
+
+/** A question the claimer asks the user before planning, with the user's answer once given. */
+export interface TaskQuestion {
+  text: string
+  answer?: string | null
+}
+
+/** A saved task: its fields copied into the new-task form. */
+export interface TaskTemplate {
+  id: string
+  name: string
+  title: string
+  detail: string
+  acceptance: string[]
+  approvePlan: boolean
+  project: string | null
+}
 
 /** The checker's verdict on one acceptance criterion. */
 export interface CriterionCheck {
@@ -43,6 +60,12 @@ export interface BoardTask {
   /** The plan its claimer proposed for the user's approval. */
   plan?: string | null
   approval?: PlanApproval
+  /** The questions the claimer asked before planning. */
+  questions?: TaskQuestion[]
+  /** When work started and finished (ms), and how many turns the bots spent on it. */
+  startedAt?: number | null
+  finishedAt?: number | null
+  turns?: number
   /** The latest check, criterion by criterion. */
   checks?: CriterionCheck[]
   /** The tasks it waits for: it starts once they are finished. */
@@ -55,12 +78,12 @@ export interface BoardTask {
   deleted?: boolean
 }
 
-/** A board column: a status, or the plans waiting for the user's approval (claimed tasks, shown first). */
+/** A board column: a status, or the tasks waiting for the user (claimed tasks, shown first). */
 export type BoardColumn = TaskStatus | 'plan'
 
 /** The board's columns, in the order they show. */
 export const TASK_COLUMNS: { status: BoardColumn; title: string }[] = [
-  { status: 'plan', title: 'Plans to approve' },
+  { status: 'plan', title: 'Waiting for you' },
   { status: 'open', title: 'Open' },
   { status: 'claimed', title: 'In progress' },
   { status: 'checking', title: 'Being checked' },
@@ -74,9 +97,28 @@ export function awaitsApproval(task: Pick<BoardTask, 'status' | 'approval'>): bo
   return task.status === 'claimed' && task.approval === 'proposed'
 }
 
+/** Whether a claimed task waits for the user's answers to the questions it asked before planning. */
+export function awaitsAnswers(task: Pick<BoardTask, 'status' | 'approval'>): boolean {
+  return task.status === 'claimed' && task.approval === 'asking'
+}
+
+/** Whether a task waits for the user: a plan to approve, or questions to answer. */
+export function needsUser(task: Pick<BoardTask, 'status' | 'approval'>): boolean {
+  return awaitsApproval(task) || awaitsAnswers(task)
+}
+
 /** The column a task shows in. */
 export function taskColumn(task: Pick<BoardTask, 'status' | 'approval'>): BoardColumn {
-  return awaitsApproval(task) ? 'plan' : task.status
+  return needsUser(task) ? 'plan' : task.status
+}
+
+/** How much work a task took, once a bot spent a turn on it: the turns and the minutes from start to finish (0 until it finishes). */
+export function taskEffort(task: Pick<BoardTask, 'turns' | 'startedAt' | 'finishedAt'>): { turns: number; minutes: number } | null {
+  const { turns = 0, startedAt, finishedAt } = task
+  if (!turns) return null
+  const timed = startedAt != null && finishedAt != null
+  const minutes = timed ? Math.max(0, Math.round((finishedAt - startedAt) / 60_000)) : 0
+  return { turns, minutes }
 }
 
 /** Tasks by column, each newest first. */
@@ -134,6 +176,7 @@ export function taskByline(
     task.status === 'open' && task.assignee ? tr('For {name}').replace('{name}', name(task.assignee)) : null,
     task.claimedBy ? name(task.claimedBy) : null,
     awaitsApproval(task) ? tr('Plan waits for you') : null,
+    awaitsAnswers(task) ? tr('Has questions for you') : null,
     task.status === 'checking' && task.reviewer ? tr('Checked by {name}').replace('{name}', name(task.reviewer)) : null,
     parent ? `↳ ${parent}` : null,
     task.branch,

@@ -12,7 +12,7 @@ import {
   type Usage,
 } from '@shared/models'
 import type { Artifact, ArtifactChunk, LibraryItem } from '@shared/artifacts'
-import type { BoardTask, TaskStatus } from '@shared/board'
+import type { BoardTask, TaskStatus, TaskTemplate } from '@shared/board'
 import type { BotClass, BotSheet } from '@shared/sheet'
 import { parseCallCue, type CallCue } from '@shared/calls'
 import type { NetworkView } from '@shared/network'
@@ -228,6 +228,23 @@ export class HostClient {
 
   deleteTask(taskId: string): Promise<{ ok: boolean }> {
     return this.call('deleteTask', { taskId })
+  }
+
+  answerQuestions(taskId: string, answers: string[]): Promise<{ task: BoardTask }> {
+    return this.call('answerQuestions', { taskId, answers })
+  }
+
+  /** The saved task templates; hosts before them have no such method. */
+  taskTemplates(): Promise<{ templates: TaskTemplate[] }> {
+    return this.call('taskTemplates')
+  }
+
+  saveTaskTemplate(taskId: string, name?: string): Promise<{ template: TaskTemplate }> {
+    return this.call('saveTaskTemplate', { taskId, ...(name ? { name } : {}) })
+  }
+
+  deleteTaskTemplate(templateId: string): Promise<{ ok: boolean }> {
+    return this.call('deleteTaskTemplate', { templateId })
   }
 
   constructor(readonly transport: HostTransport) {}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { awaitsApproval, boardColumns, criteriaWithChecks, hasBoard, newerTask, parseCriteria, taskActions, taskByline, waitingFor, type BoardTask } from './board.ts'
+import { awaitsAnswers, awaitsApproval, boardColumns, criteriaWithChecks, hasBoard, needsUser, newerTask, parseCriteria, taskActions, taskByline, taskColumn, taskEffort, waitingFor, type BoardTask } from './board.ts'
 
 const task = (id: string, status: BoardTask['status'], updatedAt: number, extra: Partial<BoardTask> = {}): BoardTask => ({
   id, title: id, detail: '', project: null, status, createdBy: null, claimedBy: null, branch: null, worktree: null,
@@ -69,4 +69,26 @@ test('an open task shows what it still waits for, and who it goes to', () => {
   assert.equal(taskByline(api, { name: (b) => b.toUpperCase(), find, tr: (k) => k }), 'Waits for Text helpers, Models · For BO')
   assert.deepEqual(waitingFor({ ...api, status: 'claimed' }, find), [], 'started: nothing to wait for')
   assert.deepEqual(waitingFor(api, (id) => (id === 'h' ? { ...helpers, status: 'done' } : id === 'm' ? { ...merged, branch: null } : undefined)), [])
+})
+
+test('a task that asks questions first waits for the user, like a plan to approve', () => {
+  const asking = task('q', 'claimed', 1, { approval: 'asking', questions: [{ text: 'Which folder?' }] })
+  const proposed = task('p', 'claimed', 1, { approval: 'proposed' })
+  const working = task('w', 'claimed', 1, { approval: 'approved' })
+  assert.ok(awaitsAnswers(asking) && !awaitsAnswers(proposed) && !awaitsAnswers(working))
+  assert.ok(needsUser(asking) && needsUser(proposed) && !needsUser(working))
+  assert.equal(taskColumn(asking), 'plan')
+  assert.equal(taskColumn(working), 'claimed')
+  assert.equal(taskColumn({ status: 'open', approval: 'asking' }), 'open', 'only a claimed task is asking')
+  assert.equal(boardColumns([asking])[0]!.title, 'Waiting for you')
+  assert.match(taskByline(asking, { name: (b) => b, find: () => undefined, tr: (k) => k }), /Has questions for you/)
+})
+
+test('a task shows its effort once a bot spent a turn on it', () => {
+  assert.equal(taskEffort({}), null)
+  assert.equal(taskEffort({ turns: 0, startedAt: null, finishedAt: null }), null)
+  assert.deepEqual(taskEffort({ turns: 3, startedAt: null, finishedAt: null }), { turns: 3, minutes: 0 })
+  assert.deepEqual(taskEffort({ turns: 2, startedAt: 1_000, finishedAt: 1_000 + 9 * 60_000 + 20_000 }), { turns: 2, minutes: 9 })
+  assert.equal(taskEffort({ startedAt: 0, finishedAt: 90_000 }), null, 'no turn yet')
+  assert.deepEqual(taskEffort({ turns: 4, startedAt: 5 * 60_000, finishedAt: null }), { turns: 4, minutes: 0 }, 'not finished: no minutes yet')
 })

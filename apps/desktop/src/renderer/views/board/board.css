@@ -74,6 +74,16 @@ textarea.board-input {
   max-height: calc(8lh + 18px);
 }
 
+/* The template chooser opens its menu from a field-shaped row above the title. */
+.board-template {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+}
+
 /* The folder field opens the folder picker; members are a column of switches. */
 .board-folder {
   display: flex;

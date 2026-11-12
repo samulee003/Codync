@@ -1994,5 +1994,14 @@
   "Acceptance criteria, one per line: what must hold for it to count as done": "受け入れ基準（1 行に 1 つ）：完了とみなす条件",
   "Approve the plan before work starts": "作業前に計画を承認",
   "Waits for {titles}": "{titles} 待ち",
-  "For {name}": "{name} 担当"
+  "For {name}": "{name} 担当",
+  "Waiting for you": "対応待ち",
+  "Has questions for you": "質問があります",
+  "Questions for you": "あなたへの質問",
+  "Your answer": "あなたの回答",
+  "Send answers": "回答を送信",
+  "{turns} turns · {minutes} min": "{turns} ターン · {minutes} 分",
+  "Save as template": "テンプレートとして保存",
+  "Template": "テンプレート",
+  "Delete template: {name}": "テンプレートを削除: {name}"
 }

@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Button, Switch } from '../../components/Controls'
+import { Button, DropdownMenu, Switch } from '../../components/Controls'
 import { Icon } from '../../components/Icon'
 import { Sheet } from '../../components/Overlay'
+import type { MenuItem } from '../../components/Menu'
 import { HStack, VStack } from '../../components/Stack'
 import { Text } from '../../components/Text'
-import { parseCriteria } from '@shared/board'
+import { parseCriteria, type TaskTemplate } from '@shared/board'
 import { isGroup } from '@shared/models'
 import { useTr } from '../../lib/use-language'
 import { useStore } from '../../store/context'
@@ -25,6 +26,27 @@ export function NewTaskForm({ done, run }: { done: () => void; run: Run }) {
   const [approvePlan, setApprovePlan] = useState(true)
   const [project, setProject] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
+  const applyTemplate = (t: TaskTemplate) => {
+    setTitle(t.title)
+    setDetail(t.detail)
+    setCriteria(t.acceptance.join('\n'))
+    setApprovePlan(t.approvePlan)
+    setProject(t.project)
+  }
+  const templateItems = (): MenuItem[] => {
+    const { templates } = store.board
+    return [
+      ...templates.map((t): MenuItem => ({ title: t.name, verbatim: true, action: () => applyTemplate(t) })),
+      ...templates.map((t, i): MenuItem => ({
+        title: tr('Delete template: {name}').replace('{name}', t.name),
+        verbatim: true,
+        icon: 'trash',
+        destructive: true,
+        divider: i === 0,
+        action: () => run(store.board.deleteTemplate(store.client, t.id)),
+      })),
+    ]
+  }
   const add = () => {
     if (!title.trim()) return
     run(store.board.create(store.client, title, detail, project, parseCriteria(criteria), approvePlan).then(() => {
@@ -37,6 +59,12 @@ export function NewTaskForm({ done, run }: { done: () => void; run: Run }) {
   }
   return (
     <VStack gap={8} className="outlined-card board-form">
+      {store.board.templates.length > 0 ? (
+        <DropdownMenu className="board-input board-template" title={tr('Template')} items={templateItems}>
+          <Icon name="doc.on.doc" size={14} color="var(--secondary)" />
+          <Text size="callout" tone="secondary" grow>{tr('Template')}</Text>
+        </DropdownMenu>
+      ) : null}
       <input className="board-input" autoFocus maxLength={200} value={title} placeholder={tr('Task title')} aria-label={tr('Task title')}
         onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
       <textarea className="board-input" value={detail} placeholder={tr('What to do: the result, the materials to use, and what not to do')} onChange={(e) => setDetail(e.target.value)} />

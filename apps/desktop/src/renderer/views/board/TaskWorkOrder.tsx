@@ -6,6 +6,7 @@ import { HStack, VStack } from '../../components/Stack'
 import { Text } from '../../components/Text'
 import { useTr } from '../../lib/use-language'
 import { useStore } from '../../store/context'
+import { TaskQuestions } from './TaskQuestions'
 
 type Run = (work: Promise<unknown>) => void
 
@@ -18,6 +19,7 @@ export function TaskWorkOrder({ task, run }: { task: BoardTask; run: Run }) {
   const criteria = criteriaWithChecks(task)
   return (
     <VStack gap={8}>
+      <TaskQuestions task={task} run={run} />
       {criteria.length ? (
         <VStack gap={4}>
           <Text size="caption" weight="semibold" tone="secondary">{tr('Acceptance criteria')}</Text>

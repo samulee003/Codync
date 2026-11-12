@@ -1994,5 +1994,14 @@
   "Acceptance criteria, one per line: what must hold for it to count as done": "Abnahmekriterien, eines pro Zeile: was erfüllt sein muss, damit es als erledigt gilt",
   "Approve the plan before work starts": "Plan vor Arbeitsbeginn freigeben",
   "Waits for {titles}": "Wartet auf {titles}",
-  "For {name}": "Für {name}"
+  "For {name}": "Für {name}",
+  "Waiting for you": "Wartet auf dich",
+  "Has questions for you": "Hat Fragen an dich",
+  "Questions for you": "Fragen an dich",
+  "Your answer": "Deine Antwort",
+  "Send answers": "Antworten senden",
+  "{turns} turns · {minutes} min": "{turns} Züge · {minutes} Min.",
+  "Save as template": "Als Vorlage speichern",
+  "Template": "Vorlage",
+  "Delete template: {name}": "Vorlage löschen: {name}"
 }

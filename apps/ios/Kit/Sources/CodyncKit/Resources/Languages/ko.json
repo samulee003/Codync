@@ -1994,5 +1994,14 @@
   "Acceptance criteria, one per line: what must hold for it to count as done": "수락 기준, 한 줄에 하나: 완료로 볼 조건",
   "Approve the plan before work starts": "작업 전에 계획 승인",
   "Waits for {titles}": "{titles} 대기 중",
-  "For {name}": "{name} 담당"
+  "For {name}": "{name} 담당",
+  "Waiting for you": "대기 중",
+  "Has questions for you": "질문이 있어요",
+  "Questions for you": "질문",
+  "Your answer": "답변",
+  "Send answers": "답변 보내기",
+  "{turns} turns · {minutes} min": "{turns}턴 · {minutes}분",
+  "Save as template": "템플릿으로 저장",
+  "Template": "템플릿",
+  "Delete template: {name}": "템플릿 삭제: {name}"
 }

@@ -1994,5 +1994,14 @@
   "Acceptance criteria, one per line: what must hold for it to count as done": "驗收標準，每行一項：要符合甚麼才算完成",
   "Approve the plan before work starts": "開工前先批准計劃",
   "Waits for {titles}": "等待：{titles}",
-  "For {name}": "交給 {name}"
+  "For {name}": "交給 {name}",
+  "Waiting for you": "等你處理",
+  "Has questions for you": "有問題想問你",
+  "Questions for you": "想問你的問題",
+  "Your answer": "你的回答",
+  "Send answers": "送出回答",
+  "{turns} turns · {minutes} min": "{turns} 輪 · {minutes} 分鐘",
+  "Save as template": "存成範本",
+  "Template": "範本",
+  "Delete template: {name}": "刪除範本：{name}"
 }

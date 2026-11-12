@@ -23,7 +23,7 @@ test('a work order: plan to approve, then criteria checked one by one', async ()
 
     const card = page.locator('.board-task', { hasText: title })
     await expect(card.getByRole('button', { name: '批准計劃' })).toBeVisible({ timeout: 180_000 })
-    await expect(page.getByText(/待批准的計劃/)).toBeVisible()
+    await expect(page.getByText(/等你處理/)).toBeVisible()
     await page.screenshot({ path: 'test-results/2-plan-to-approve.png' })
     await card.getByRole('button', { name: '批准計劃' }).click()
 
