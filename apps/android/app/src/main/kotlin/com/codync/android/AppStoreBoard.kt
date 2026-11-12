@@ -40,8 +40,34 @@ fun AppStore.splitGoal(goal: String, handed: (String) -> Unit) = action("split-g
     handed(answer["name"]?.jsonPrimitive?.contentOrNull ?: "")
 }
 
-fun AppStore.createTask(title: String, detail: String, project: String?, onDone: () -> Unit) = action("create-task") {
-    keepTask(ready().call("createTask", body("title" to title, "detail" to detail, "project" to project?.ifBlank { null })))
+/** A new task; with `approvePlan`, its claimer's plan waits for the user before any work starts. */
+fun AppStore.createTask(title: String, detail: String, project: String?, acceptance: List<String>, approvePlan: Boolean, onDone: () -> Unit) =
+    action("create-task") {
+        val fields = buildJsonObject {
+            put("title", title)
+            put("detail", detail)
+            project?.ifBlank { null }?.let { put("project", it) }
+            put("acceptance", buildJsonArray { acceptance.forEach { add(JsonPrimitive(it)) } })
+            put("approvePlan", approvePlan)
+        }
+        keepTask(ready().call("createTask", fields))
+        onDone()
+    }
+
+fun AppStore.approvePlan(task: BoardTask) = action("task:${task.id}") {
+    keepTask(ready().call("approvePlan", body("taskId" to task.id)))
+}
+
+/** Sends the plan back with what to change. */
+fun AppStore.revisePlan(task: BoardTask, note: String, onDone: () -> Unit) = action("task:${task.id}") {
+    keepTask(ready().call("revisePlan", body("taskId" to task.id, "note" to note)))
+    onDone()
+}
+
+/** One answer per question, in order. */
+fun AppStore.answerQuestions(task: BoardTask, answers: List<String>, onDone: () -> Unit) = action("task:${task.id}") {
+    val list = buildJsonArray { answers.forEach { add(JsonPrimitive(it)) } }
+    keepTask(ready().call("answerQuestions", buildJsonObject { put("taskId", task.id); put("answers", list) }))
     onDone()
 }
 

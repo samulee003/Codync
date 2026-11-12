@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The computer's team board (`host/src/board/`): tasks the user and the bots share, by status. The user adds tasks,
 /// hands one to a bot, merges a finished task's branch, and reopens, closes or deletes tasks; bots claim and finish
-/// them through their own tools.
+/// them through their own tools. Tasks waiting for the user (a plan to approve, questions to answer) come first.
 public struct BoardView: View {
     @Environment(BotStore.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -18,6 +18,8 @@ public struct BoardView: View {
 
     public var body: some View {
         let columns = BoardTask.columns(model.tasks.values)
+        let waiting = BoardTask.waitingForUser(model.tasks.values)
+        let waitingTitle = L10n.tr("Waiting for you")
         VStack(spacing: 0) {
             ModalHeader("Team board") {
                 IconButton("Split a goal into tasks", systemImage: "wand.and.stars") { splitting = true }
@@ -32,7 +34,12 @@ public struct BoardView: View {
                 if let notice {
                     Text(notice).font(.caption).foregroundStyle(Palette.secondary)
                 }
-                if !columns.isEmpty {
+                if !waiting.isEmpty || !columns.isEmpty {
+                    if !waiting.isEmpty {
+                        CardSection("\(waitingTitle) · \(waiting.count)") {
+                            ForEach(waiting) { row($0) }
+                        }
+                    }
                     ForEach(columns) { column in
                         CardSection("\(L10n.tr(column.status.title)) · \(column.tasks.count)") {
                             ForEach(column.tasks) { row($0) }
@@ -102,9 +109,9 @@ public struct BoardView: View {
         .outlinedCard(vertical: 10)
     }
 
-    /// Who holds it, who checks it, the task it is part of, its branch, and how many notes it has.
+    /// Who holds it, who checks it, what it waits for, the task it is part of, its branch, and how many notes it has.
     private func byline(_ task: BoardTask) -> String {
-        task.byline(name: { model.bots[$0]?.name ?? $0 }, parentTitle: { model.tasks[$0]?.title })
+        task.byline(name: { model.bots[$0]?.name ?? $0 }, find: { model.tasks[$0] })
     }
 
     private func menuItems(_ task: BoardTask) -> [MenuItem] {
@@ -143,7 +150,8 @@ public struct BoardView: View {
     }
 }
 
-/// An unfolded task: its detail, where its work is, its summary and notes, and a field to add a note.
+/// An unfolded task: its detail, where its work is, its work order, its summary, its effort and notes, and a field to
+/// add a note.
 private struct TaskDetail: View {
     let task: BoardTask
     let failed: (String) -> Void
@@ -156,7 +164,11 @@ private struct TaskDetail: View {
             if let place = task.worktree ?? task.project {
                 Text(place).font(.caption.monospaced()).foregroundStyle(Palette.secondary).lineLimit(1).truncationMode(.middle)
             }
+            TaskWorkOrder(task: task, failed: failed)
             if let summary = task.summary { Text(summary).font(.callout).textSelection(.enabled) }
+            if let effort = task.effort {
+                Text(effort.line).font(.caption).foregroundStyle(Palette.secondary)
+            }
             ForEach(task.notes, id: \.self) { n in
                 Text("\(n.by.map { model.bots[$0]?.name ?? $0 } ?? L10n.tr("You")): \(n.text)")
                     .font(.callout).foregroundStyle(Palette.secondary).textSelection(.enabled)

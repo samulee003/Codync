@@ -30,17 +30,23 @@ import kotlinx.serialization.json.jsonPrimitive
 @Composable internal fun NewTaskSheet(state: AppState, store: AppStore, done: () -> Unit) {
     var title by remember { mutableStateOf("") }
     var detail by remember { mutableStateOf("") }
+    var criteria by remember { mutableStateOf("") }
+    var approvePlan by remember { mutableStateOf(true) }
     var project by remember { mutableStateOf<String?>(null) }
     var picking by remember { mutableStateOf(false) }
     val trimmed = title.trim()
     Column(Modifier.fillMaxSize().background(Palette.background)) {
         ModalHeader("New task") {
-            IconButton("Add task", "checkmark", enabled = trimmed.isNotEmpty()) { store.createTask(trimmed, detail, project, done) }
+            IconButton("Add task", "checkmark", enabled = trimmed.isNotEmpty()) {
+                store.createTask(trimmed, detail, project, parseCriteria(criteria), approvePlan, done)
+            }
         }
         CardForm {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 FieldBox(title, { title = it }, tr("Task title"))
-                FieldBox(detail, { detail = it }, tr("What to do, and how to check it is done"), minLines = 3, maxLines = 8)
+                FieldBox(detail, { detail = it }, tr("What to do: the result, the materials to use, and what not to do"), minLines = 3, maxLines = 8)
+                FieldBox(criteria, { criteria = it }, tr("Acceptance criteria, one per line: what must hold for it to count as done"),
+                    minLines = 3, maxLines = 8)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.weight(1f).pill().plainButton { picking = true }, verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -50,6 +56,9 @@ import kotlinx.serialization.json.jsonPrimitive
                             color = if (project == null) Palette.secondary else Palette.text, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                     }
                     if (project != null) IconButton("Clear", "xmark") { project = null }
+                }
+                CodyncSwitch(approvePlan, { approvePlan = it }, Modifier.fillMaxWidth()) {
+                    Text(tr("Approve the plan before work starts"), Modifier.weight(1f), style = Type.body, color = Palette.text)
                 }
             }
         }

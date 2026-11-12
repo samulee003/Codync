@@ -11,12 +11,14 @@ else a generic "Bug fixes and improvements" line. Delete old sections.
 ### zh-Hant
 - bot 詳情「智慧體」區塊的「壓縮對話」預設改為「自動」：交給 Claude Code 或 Codex 在對話快滿時自己壓縮。想讓 Codync 提早壓縮，可以改選提早、接近上限或指定數量（從 100K、200K… 裡挑，或自己輸入）。已經是「提早」的 bot 會保留原設定，想交給智慧體自己壓縮可以改選「自動」。
 - 新增團隊任務板：在 bot 列表點清單按鈕，就能新增任務、指派給 bot，並查看 bot 認領、記錄和完成的進度。git 專案裡的任務會各自用獨立的分支工作，完成後可以直接在任務板上合併。
+- 任務板新增「等你處理」：bot 提出計畫時可以核准或要求修改，有問題時在任務上回答。新任務可以寫驗收條件，每一條會顯示是否通過。
 - 主帥 bot 會把大任務拆成子任務分給其他 bot 同時進行，完成後由另一個 bot 審查。
 - 電腦上有多個 bot 同時操作時，每一個都會顯示正在使用電腦的標記。
 
 ### en-US
 - Summarize long chats, in a bot's Agent section, now defaults to Auto: Claude Code or Codex summarizes a chat on its own once it fills up. Pick Early, Near the limit or a size (100K, 200K and so on, or one you type) to have Codync summarize sooner. Bots already on Early keep it; pick Auto to leave it to the agent.
 - New team board (checklist button): your lead bot splits big tasks for bots to share, and another bot checks each one.
+- Team board: a Waiting for you section lists plans to approve and questions to answer. New tasks take acceptance criteria, and each shows whether it passed.
 
 ## 2.42.0
 ### zh-Hant

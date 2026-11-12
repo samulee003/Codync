@@ -28,8 +28,22 @@ extension BotStore {
         try await withLink { try await $0.splitGoal(goal) }
     }
 
-    func createTask(title: String, detail: String, project: String?) async throws {
-        upsertTask(try await withLink { try await $0.createTask(title: title, detail: detail, project: project) })
+    func createTask(title: String, detail: String, project: String?, acceptance: [String], approvePlan: Bool) async throws {
+        upsertTask(try await withLink {
+            try await $0.createTask(title: title, detail: detail, project: project, acceptance: acceptance, approvePlan: approvePlan)
+        })
+    }
+
+    func approvePlan(_ task: BoardTask) async throws {
+        upsertTask(try await withLink { try await $0.approvePlan(taskId: task.id) })
+    }
+
+    func revisePlan(_ task: BoardTask, note: String) async throws {
+        upsertTask(try await withLink { try await $0.revisePlan(taskId: task.id, note: note) })
+    }
+
+    func answerQuestions(_ task: BoardTask, answers: [String]) async throws {
+        upsertTask(try await withLink { try await $0.answerQuestions(taskId: task.id, answers: answers) })
     }
 
     func noteTask(_ task: BoardTask, text: String) async throws {

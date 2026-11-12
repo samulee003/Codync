@@ -25,9 +25,35 @@ public extension HostClient {
         return res.name
     }
 
-    func createTask(title: String, detail: String, project: String?) async throws -> BoardTask {
-        struct Body: Encodable { var title: String; var detail: String; var project: String? }
-        let res: TaskAnswer = try await call("createTask", Body(title: title, detail: detail, project: project))
+    /// A new task; with `approvePlan`, its claimer's plan waits for the user before any work starts.
+    func createTask(title: String, detail: String, project: String?, acceptance: [String], approvePlan: Bool) async throws -> BoardTask {
+        struct Body: Encodable {
+            var title: String
+            var detail: String
+            var project: String?
+            var acceptance: [String]
+            var approvePlan: Bool
+        }
+        let body = Body(title: title, detail: detail, project: project, acceptance: acceptance, approvePlan: approvePlan)
+        let res: TaskAnswer = try await call("createTask", body)
+        return res.task
+    }
+
+    func approvePlan(taskId: String) async throws -> BoardTask {
+        let res: TaskAnswer = try await call("approvePlan", ["taskId": taskId])
+        return res.task
+    }
+
+    /// Sends the plan back with what to change.
+    func revisePlan(taskId: String, note: String) async throws -> BoardTask {
+        let res: TaskAnswer = try await call("revisePlan", ["taskId": taskId, "note": note])
+        return res.task
+    }
+
+    /// One answer per question, in order.
+    func answerQuestions(taskId: String, answers: [String]) async throws -> BoardTask {
+        struct Body: Encodable { var taskId: String; var answers: [String] }
+        let res: TaskAnswer = try await call("answerQuestions", Body(taskId: taskId, answers: answers))
         return res.task
     }
 

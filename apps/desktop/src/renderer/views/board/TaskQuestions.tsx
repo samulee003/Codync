@@ -29,13 +29,13 @@ export function TaskQuestions({ task, run }: { task: BoardTask; run: Run }) {
   )
 }
 
-/** One input per question, sent together; a question the user can't answer may stay blank. */
+/** One input per question, sent together once each has an answer (as on the phones). */
 function AnswerForm({ task, run }: { task: BoardTask; run: Run }) {
   const tr = useTr()
   const store = useStore()
   const questions = task.questions ?? []
   const [answers, setAnswers] = useState<string[]>(() => questions.map(() => ''))
-  const complete = answers.some((a) => a.trim())
+  const complete = questions.every((_, i) => (answers[i] ?? '').trim())
   const send = () => {
     if (!complete) return
     run(store.board.answerQuestions(store.client, task.id, answers.map((a) => a.trim())))

@@ -8,6 +8,8 @@ struct NewTaskSheet: View {
     @Environment(\.dismissModal) private var dismiss
     @State private var title = ""
     @State private var detail = ""
+    @State private var criteria = ""
+    @State private var approvePlan = true
     @State private var project: String?
     @State private var picking = false
     @State private var saving = false
@@ -28,7 +30,10 @@ struct NewTaskSheet: View {
             CardForm {
                 CardSection {
                     TextField(L10n.tr("Task title"), text: $title).focused($focused)
-                    TextField(L10n.tr("What to do, and how to check it is done"), text: $detail, axis: .vertical).lineLimit(3...8)
+                    TextField(L10n.tr("What to do: the result, the materials to use, and what not to do"), text: $detail, axis: .vertical)
+                        .lineLimit(3...8)
+                    TextField(L10n.tr("Acceptance criteria, one per line: what must hold for it to count as done"), text: $criteria, axis: .vertical)
+                        .lineLimit(3...8)
                     HStack(spacing: 8) {
                         Button { picking = true } label: {
                             HStack(spacing: 8) {
@@ -46,6 +51,10 @@ struct NewTaskSheet: View {
                             IconButton("Clear", systemImage: "xmark") { project = nil }
                         }
                     }
+                    Toggle(isOn: $approvePlan) {
+                        Text(L10n.tr("Approve the plan before work starts"))
+                    }
+                    .toggleStyle(.codync)
                 }
                 if let error {
                     Text(L10n.tr(error)).font(.caption).foregroundStyle(Palette.danger).textSelection(.enabled)
@@ -69,7 +78,8 @@ struct NewTaskSheet: View {
         saving = true
         Task {
             do {
-                try await model.createTask(title: trimmed, detail: detail, project: project)
+                try await model.createTask(title: trimmed, detail: detail, project: project,
+                                           acceptance: BoardTask.parseCriteria(criteria), approvePlan: approvePlan)
                 dismiss()
             } catch {
                 self.error = error.localizedDescription

@@ -30,7 +30,7 @@ import com.codync.android.design.*
 /**
  * The computer's team board (iOS `BoardView`, docs/features/team-board.md): tasks the user and the bots share, by status.
  * The user adds tasks, hands one to a bot, merges a finished task's branch, and reopens, closes or deletes tasks; bots claim
- * and finish them through their own tools.
+ * and finish them through their own tools. Tasks waiting for the user (a plan to approve, questions to answer) come first.
  */
 @Composable internal fun BoardView(state: AppState, store: AppStore) {
     val online = state.actualConnection is LinkState.Ready
@@ -40,7 +40,9 @@ import com.codync.android.design.*
     var splitting by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     val splittingNotice = tr("{name} is splitting it into tasks.")
+    val waitingTitle = tr("Waiting for you")
     var expanded by remember { mutableStateOf<String?>(null) }
+    val waiting = waitingForUser(state.tasks.values)
     val columns = boardColumns(state.tasks.values)
     Column(Modifier.fillMaxSize().background(Palette.background)) {
         ModalHeader("Team board") {
@@ -52,9 +54,9 @@ import com.codync.android.design.*
             state.error?.let { Text(tr(it), style = Type.caption, color = Palette.danger) }
             notice?.let { Text(it, style = Type.caption, color = Palette.secondary) }
             when {
-                columns.isNotEmpty() -> for ((status, tasks) in columns) Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SectionHeading("${tr(status.title)} · ${tasks.size}", Modifier.padding(start = 2.dp))
-                    for (task in tasks) TaskRow(task, state, store, task.id == expanded) { expanded = if (expanded == task.id) null else task.id }
+                waiting.isNotEmpty() || columns.isNotEmpty() -> {
+                    if (waiting.isNotEmpty()) TaskSection(waitingTitle, waiting, state, store, expanded) { expanded = if (expanded == it) null else it }
+                    for ((status, tasks) in columns) TaskSection(tr(status.title), tasks, state, store, expanded) { expanded = if (expanded == it) null else it }
                 }
                 "board" in state.busy -> Box(Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) { Spinner(20.dp) }
                 else -> Column(Modifier.outlinedCard(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -71,6 +73,14 @@ import com.codync.android.design.*
     }
 }
 
+/** One titled group of task rows; `onToggle` gets the id of the task whose card was tapped. */
+@Composable private fun TaskSection(title: String, tasks: List<BoardTask>, state: AppState, store: AppStore, expanded: String?, onToggle: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeading("$title · ${tasks.size}", Modifier.padding(start = 2.dp))
+        for (task in tasks) TaskRow(task, state, store, task.id == expanded) { onToggle(task.id) }
+    }
+}
+
 @Composable private fun TaskRow(task: BoardTask, state: AppState, store: AppStore, expanded: Boolean, toggle: () -> Unit) {
     Column(Modifier.outlinedCard(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -82,7 +92,7 @@ import com.codync.android.design.*
                     val translate = translator()
                     val subtitle = task.byline(
                         name = { id -> state.bots.firstOrNull { it.id == id }?.name ?: id },
-                        parentTitle = { id -> state.tasks[id]?.title },
+                        find = { id -> state.tasks[id] },
                         tr = translate,
                     )
                     if (subtitle.isNotEmpty()) Text(subtitle, style = Type.caption, color = Palette.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -105,16 +115,22 @@ private fun menuItems(task: BoardTask, state: AppState, store: AppStore, assignT
         } else listOf(MenuItem(action.title, icon = action.icon, destructive = action.destructive) { store.performTask(action, task) })
     }
 
-/** An unfolded task: its detail, where its work is, its summary and notes, and a field to add a note. */
+/**
+ * An unfolded task: its detail, where its work is, its work order, its summary, its effort and notes, and a field to add a
+ * note.
+ */
 @Composable private fun TaskDetail(task: BoardTask, state: AppState, store: AppStore) {
     var note by remember(task.id) { mutableStateOf("") }
     val you = tr("You")
+    val translate = translator()
     Column(Modifier.padding(start = 26.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (task.detail.isNotEmpty()) Text(task.detail, style = Type.callout, color = Palette.text)
         (task.worktree ?: task.project)?.let {
             Text(it, style = Type.caption.copy(fontFamily = FontFamily.Monospace), color = Palette.secondary, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
         }
+        TaskWorkOrder(task, store)
         task.summary?.let { Text(it, style = Type.callout, color = Palette.text) }
+        task.effort?.let { Text(it.line(translate), style = Type.caption, color = Palette.secondary) }
         for (n in task.notes) {
             val by = n.by?.let { id -> state.bots.firstOrNull { it.id == id }?.name ?: id } ?: you
             Text("$by: ${n.text}", style = Type.callout, color = Palette.secondary)
