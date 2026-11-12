@@ -3,7 +3,7 @@
 //! checker's verdict on each criterion. A task waiting for approval can't be split or finished; a check marks every
 //! criterion pass or fail, and one failed criterion sends the work back.
 
-use super::{MAX_NOTE, MAX_NOTES, Note, Task, TaskStatus, change, check_claimer, text, wire};
+use super::{MAX_NOTE, MAX_NOTES, Note, Task, TaskStatus, change, check_claimer, effort, text, wire};
 use crate::agent::bot::Cmd;
 use crate::hub::Hub;
 use crate::remote::push::{self, AlertKind};
@@ -294,8 +294,10 @@ pub fn failures(checks: &[Check]) -> String {
     out
 }
 
+/// Tells the claimer of `task` something about it: a turn the host starts for the task (`effort`).
 fn tell(hub: &Hub, task: &Task, text: String) {
     let Some(bot) = &task.claimed_by else { return };
+    effort::count_turn(hub, &task.id);
     if let Err(error) = hub.send_cmd(bot, Cmd::Prompt { text, call: None }) {
         tracing::warn!(bot, error = format!("{error:#}"), "plan message not delivered");
     }

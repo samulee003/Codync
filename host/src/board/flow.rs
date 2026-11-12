@@ -4,7 +4,9 @@
 
 use super::brief;
 use super::sheet::{self, BotClass, Deed};
-use super::{MAX_NOTE, MAX_NOTES, Note, Task, TaskStatus, change, children, dispatch, get, take, text, wire};
+use super::{
+    MAX_NOTE, MAX_NOTES, Note, Task, TaskStatus, change, children, dispatch, effort, get, lessons, take, text, wire,
+};
 use crate::LockExt;
 use crate::agent::bot::Cmd;
 use crate::hub::Hub;
@@ -60,14 +62,16 @@ pub fn plan(hub: &Hub, id: &str, split: bool) -> Result<Value> {
     let lead = dispatch::lead(hub)?;
     let task = take(hub, id, &lead.id)?;
     super::focus::begin(hub, &lead.id, &task);
-    send(hub, &lead.id, plan_prompt(&task, split, &teammates(hub, &lead.id)));
+    let prompt = plan_prompt(&task, split, &lessons::prompt(hub, &lead.id), &teammates(hub, &lead.id));
+    send(hub, &lead.id, &task.id, prompt);
     Ok(json!({"botId": lead.id, "name": lead.name}))
 }
 
 /// What the lead is told to plan a task: size it first, so only work big enough to gain from the team is split (a team
 /// costs a planning turn, a turn per part and a check per part: a task one bot does in minutes is faster and cheaper
-/// alone). `split`: the user asked for a split (the wand), which still yields to a small task.
-pub(super) fn plan_prompt(task: &Task, split: bool, teammates: &str) -> String {
+/// alone). `split`: the user asked for a split (the wand), which still yields to a small task. `lessons`: the lead's
+/// lessons block (`lessons::prompt`), empty when none.
+pub(super) fn plan_prompt(task: &Task, split: bool, lessons: &str, teammates: &str) -> String {
     let id = &task.id;
     let asked = if split { " The user asked for it to be split if it is big enough." } else { "" };
     let mut prompt = format!(
@@ -79,7 +83,8 @@ pub(super) fn plan_prompt(task: &Task, split: bool, teammates: &str) -> String {
          work (about 10 minutes or more), or that need different strengths: split it into those parts and coordinate. \
          A subtask is create_task with parentId {id}: self-contained (what to do, where), with acceptance criteria the \
          check marks pass or fail, one bot's work, and handed to the teammate who fits it best with assignee (by class and what is left of their \
-         plan); leave assignee out only if anyone can do it. Give a part that builds on others after with their ids \
+         plan); leave assignee out only if anyone can do it. Give simple parts to teammates on cheaper models and keep the hard ones (and your own \
+         planning and assembling) for the stronger ones. Give a part that builds on others after with their ids \
          (create_task answers each id): it waits until they are finished, then its assignee starts on it. Don't do the subtasks yourself: you will be told when they are all finished; then check \
          and assemble their results into the task's result and finish_task {id}. Tell the user in a few lines how you \
          sized and planned it.]\n\nTask: {}",
@@ -89,6 +94,7 @@ pub(super) fn plan_prompt(task: &Task, split: bool, teammates: &str) -> String {
         let _ = write!(prompt, "\n\n{}", task.detail);
     }
     prompt.push_str(&brief::work_order(task));
+    prompt.push_str(lessons);
     let _ = write!(prompt, "\n\n{teammates}");
     prompt
 }
@@ -165,6 +171,7 @@ pub fn review(hub: &Hub, id: &str, bot: &str, verdict: Verdict<'_>) -> Result<Ta
             task.status = TaskStatus::Claimed;
             task.send_backs = task.send_backs.saturating_add(1);
         }
+        effort::stamp_finished(task);
         Ok(())
     })?;
     let approve = matches!(task.status, TaskStatus::Review | TaskStatus::Done);
@@ -174,10 +181,12 @@ pub fn review(hub: &Hub, id: &str, bot: &str, verdict: Verdict<'_>) -> Result<Ta
         accepted(hub, &task);
     } else if let Some(claimer) = &task.claimed_by {
         sheet::record(hub, claimer, Deed::SentBack);
+        lessons::record(hub, claimer, &task.title, &feedback);
         let name = hub.bot_name(bot);
         send(
             hub,
             claimer,
+            &task.id,
             format!(
                 "[Codync: {name} checked task {} ({}) and sent it back. Fix what it says, then finish_task {} again.]\
                  \n\n{feedback}",
@@ -205,6 +214,7 @@ pub(super) fn after_finish(hub: &Hub, task: &Task) {
             send(
                 hub,
                 reviewer,
+                &task.id,
                 format!(
                     "[Codync: {name} finished task {id} on the team board, and you check it before it counts as done. \
                      read_task {id}, then look at the result itself (open the files, run it, compare it with what the \
@@ -262,10 +272,12 @@ fn parent_ready(hub: &Hub, task: &Task) {
         let _ =
             write!(prompt, "\n- {} ({}): {}", part.title, wire(part.status), part.summary.as_deref().unwrap_or("-"));
     }
-    send(hub, coordinator, prompt);
+    send(hub, coordinator, &parent.id, prompt);
 }
 
-fn send(hub: &Hub, bot: &str, text: String) {
+/// Sends `bot` a prompt about `task`: a turn the host starts for it (`effort`), whether or not it is delivered.
+fn send(hub: &Hub, bot: &str, task: &str, text: String) {
+    effort::count_turn(hub, task);
     if let Err(error) = hub.send_cmd(bot, Cmd::Prompt { text, call: None }) {
         tracing::warn!(bot, error = format!("{error:#}"), "board message not delivered");
     }

@@ -2,7 +2,9 @@
 //! to a bot.
 
 use super::brief::Approval;
-use super::{Actor, MAX_DETAIL, Task, TaskStatus, change, claim, flow, get, git, release, text, title, tools};
+use super::{
+    Actor, MAX_DETAIL, Task, TaskStatus, change, claim, effort, flow, get, git, lessons, release, text, title, tools,
+};
 use crate::agent::bot::Cmd;
 use crate::hub::Hub;
 use anyhow::{Result, anyhow, bail, ensure};
@@ -37,6 +39,10 @@ pub async fn set_status(hub: &Hub, id: &str, status: TaskStatus) -> Result<Task>
         if status == TaskStatus::Open {
             task.claimed_by = None;
             task.reviewer = None;
+            // Starting over: the effort so far goes with it.
+            task.started_at = None;
+            task.finished_at = None;
+            task.turns = 0;
             // Starting over: a plan the user approves is proposed again.
             if task.approval != Approval::NotNeeded {
                 task.approval = Approval::Waiting;
@@ -112,11 +118,14 @@ pub async fn assign(hub: &Hub, id: &str, bot: &str, by: Actor<'_>) -> Result<Tas
         Actor::Bot(lead) => hub.bot_name(lead),
     };
     super::focus::begin(hub, &row.config.id, &task);
-    hub.send_cmd(&row.config.id, Cmd::Prompt { text: assigned_prompt(&task, &who), call: None })?;
+    effort::count_turn(hub, &task.id);
+    let text = assigned_prompt(&task, &who, &lessons::prompt(hub, &row.config.id));
+    hub.send_cmd(&row.config.id, Cmd::Prompt { text, call: None })?;
     Ok(task)
 }
 
-fn assigned_prompt(task: &Task, who: &str) -> String {
+/// The prompt that hands `task` to a bot; `lessons` is the bot's lessons block (`lessons::prompt`), empty when none.
+pub(super) fn assigned_prompt(task: &Task, who: &str, lessons: &str) -> String {
     let mut prompt = format!(
         "[Codync: {who} assigned you task {} on the team board, and it is claimed for you. Read it with read_task, \
          work on it (its folder is yours to work in), share findings others could use with note_task, and end with \
@@ -130,5 +139,6 @@ fn assigned_prompt(task: &Task, who: &str) -> String {
     if let Some(tree) = &task.worktree {
         let _ = write!(prompt, "\n\n{}", tools::worktree_hint(tree, task.branch.as_deref()));
     }
+    prompt.push_str(lessons);
     prompt
 }

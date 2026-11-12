@@ -1,6 +1,7 @@
 //! The team board's methods for the apps: `tasks` (with the bots turned off from claiming), `createTask`, `editTask`,
-//! `noteTask`, `assignTask`, `setTaskStatus`, `mergeTask`, `deleteTask`, `approvePlan`, `revisePlan`, `answerQuestions`, `setBoardClaims`, `splitGoal`, `botSheets` and `setBotClass`. Task
-//! changes reach every client as `task` events.
+//! `noteTask`, `assignTask`, `setTaskStatus`, `mergeTask`, `deleteTask`, `approvePlan`, `revisePlan`, `answerQuestions`,
+//! `setBoardClaims`, `splitGoal`, `botSheets`, `setBotClass`, `botLessons`, `forgetLessons`, `taskTemplates`,
+//! `saveTaskTemplate` and `deleteTaskTemplate`. Task changes reach every client as `task` events.
 
 use super::str_arg;
 use crate::board::{self, Actor, NewTask, TaskStatus};
@@ -29,6 +30,25 @@ pub(super) async fn call(hub: &Arc<Hub>, method: &str, b: Value) -> Result<Contr
             return Ok(ControlFlow::Break(json!({"sheet": sheet})));
         }
         "splitGoal" => return Ok(ControlFlow::Break(board::dispatch::split_goal(hub, str_arg(&b, "goal")?)?)),
+        // A bot's lessons from checks, newest first, and their reset (`board::lessons`).
+        "botLessons" => {
+            let lessons = board::lessons::recent(hub, str_arg(&b, "botId")?, board::lessons::MAX_LESSONS);
+            return Ok(ControlFlow::Break(json!({"lessons": lessons})));
+        }
+        "forgetLessons" => {
+            board::lessons::forget(hub, str_arg(&b, "botId")?)?;
+            return Ok(ControlFlow::Break(json!({"ok": true})));
+        }
+        // Saved tasks to start new ones from (`board::template`).
+        "taskTemplates" => return Ok(ControlFlow::Break(json!({"templates": board::template::list(&hub.store)}))),
+        "saveTaskTemplate" => {
+            let template = board::template::save(hub, str_arg(&b, "taskId")?, b["name"].as_str())?;
+            return Ok(ControlFlow::Break(json!({"template": template})));
+        }
+        "deleteTaskTemplate" => {
+            board::template::delete(hub, str_arg(&b, "templateId")?)?;
+            return Ok(ControlFlow::Break(json!({"ok": true})));
+        }
         "createTask" => {
             let new = NewTask {
                 title: str_arg(&b, "title")?,

@@ -6,6 +6,9 @@ use std::sync::Arc;
 
 mod ask;
 mod stuck;
+mod task_effort;
+mod task_lessons;
+mod task_templates;
 
 fn hub() -> Arc<Hub> {
     let dir = std::env::temp_dir().join(format!("codync-board-{}", uuid::Uuid::new_v4()));
@@ -389,10 +392,10 @@ fn a_bot_whose_last_turn_failed_still_takes_board_work() {
 fn the_lead_sizes_a_task_before_splitting_it() {
     let hub = hub();
     let task = new_task(&hub, "Fix the typo", None);
-    let plain = flow::plan_prompt(&task, false, "Teammates:");
+    let plain = flow::plan_prompt(&task, false, "", "Teammates:");
     assert!(plain.contains("First size it") && plain.contains("Size: small, one bot") && plain.contains("15 minutes"));
     assert!(!plain.contains("asked for it to be split"));
-    let wand = flow::plan_prompt(&task, true, "Teammates:\n- Ada (codex)");
+    let wand = flow::plan_prompt(&task, true, "", "Teammates:\n- Ada (codex)");
     assert!(wand.contains("asked for it to be split if it is big enough") && wand.ends_with("- Ada (codex)"));
 }
 
@@ -437,7 +440,7 @@ async fn the_user_approves_the_plan_before_any_work() {
     let task = create(&hub, Actor::User, &new).unwrap();
     assert_eq!(task.approval, brief::Approval::Waiting);
     let lead = flow::plan(&hub, &task.id, false).unwrap()["botId"].as_str().unwrap().to_owned();
-    let prompt = flow::plan_prompt(&get(&hub.store, &task.id).unwrap(), false, "Teammates:");
+    let prompt = flow::plan_prompt(&get(&hub.store, &task.id).unwrap(), false, "", "Teammates:");
     assert!(prompt.contains(&format!("first propose_plan {}", task.id)), "{prompt}");
 
     // No work before the plan is approved: no finish, no subtasks.

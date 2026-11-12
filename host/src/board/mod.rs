@@ -19,13 +19,16 @@ use std::sync::Mutex;
 
 pub mod brief;
 pub mod dispatch;
+mod effort;
 pub mod flow;
 mod focus;
 pub mod git;
+pub mod lessons;
 mod manage;
 pub mod order;
 pub mod sheet;
 mod stale;
+pub mod template;
 pub mod tools;
 
 pub use manage::{assign, delete, edit, merge, set_status};
@@ -55,6 +58,10 @@ pub struct Board {
     focus: focus::Focus,
     /// The stuck tasks a bot was already poked about, and when (`stale`).
     stale: stale::Poked,
+    /// Serializes changes to a bot's lessons from checks (`lessons`).
+    lessons: Mutex<()>,
+    /// Serializes saving and deleting task templates (`template`), so the cap holds.
+    templates: Mutex<()>,
 }
 
 /// Where a task stands (wire values: `open` / `claimed` / `checking` / `review` / `done` / `cancelled`).
@@ -146,6 +153,15 @@ pub struct Task {
     pub assignee: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// When it was first claimed (`effort`).
+    #[serde(default)]
+    pub started_at: Option<i64>,
+    /// When its work first counted as finished: in review or done (`effort`).
+    #[serde(default)]
+    pub finished_at: Option<i64>,
+    /// Turns the host started for it: prompts about it to its bots (`effort`).
+    #[serde(default)]
+    pub turns: u32,
     #[serde(default)]
     pub rev: i64,
     #[serde(default)]
@@ -205,6 +221,11 @@ pub fn since(store: &Store, since: i64) -> Vec<Value> {
 /// Saves a task under a new rev and tells the apps.
 fn put(hub: &Hub, task: &mut Task) -> Result<()> {
     task.updated_at = now_ms();
+    save_task(hub, task)
+}
+
+/// Saves a task under a new rev and tells the apps, keeping its `updated_at` as it is.
+fn save_task(hub: &Hub, task: &mut Task) -> Result<()> {
     hub.emit_change(|| {
         hub.store.kv_set_stamped(&key(&task.id), |rev| {
             task.rev = rev;
@@ -298,6 +319,9 @@ pub fn create(hub: &Hub, by: Actor<'_>, new: &NewTask<'_>) -> Result<Task> {
         checks: vec![],
         after: new.after.clone(),
         assignee: None,
+        started_at: None,
+        finished_at: None,
+        turns: 0,
         created_at: now,
         updated_at: now,
         rev: 0,
@@ -354,6 +378,7 @@ fn take(hub: &Hub, id: &str, bot: &str) -> Result<Task> {
         task.status = TaskStatus::Claimed;
         task.claimed_by = Some(bot.to_owned());
         task.assignee = None;
+        effort::stamp_started(task);
         Ok(())
     })
 }
@@ -420,6 +445,7 @@ pub async fn finish(hub: &Hub, id: &str, bot: &str, summary: &str) -> Result<Tas
             }
             None => task.status = flow::settled(task),
         }
+        effort::stamp_finished(task);
         Ok(())
     })?;
     flow::after_finish(hub, &task);

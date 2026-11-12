@@ -216,6 +216,12 @@ pub async fn call(hub: &Hub, bot: &str, name: &str, args: &Value) -> Result<Valu
         if !order.is_empty() {
             answer["workOrder"] = order.trim().into();
         }
+        // What the bot's checks sent back before: the lessons it doesn't repeat (`lessons`).
+        let lessons: Vec<String> =
+            super::lessons::recent(hub, bot, super::lessons::QUOTED).into_iter().map(|l| l.text).collect();
+        if !lessons.is_empty() {
+            answer["lessons"] = json!(lessons);
+        }
     }
     Ok(answer)
 }

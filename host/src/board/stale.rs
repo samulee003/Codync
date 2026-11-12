@@ -4,7 +4,7 @@
 
 use super::brief::Approval;
 use super::dispatch::free;
-use super::{Actor, Task, TaskStatus, children, release};
+use super::{Actor, Task, TaskStatus, children, effort, release};
 use crate::LockExt;
 use crate::agent::bot::Cmd;
 use crate::hub::Hub;
@@ -74,6 +74,7 @@ pub(super) fn sweep(hub: &Hub, now: i64, at: Instant) {
              or release_task it with why, so it isn't left waiting.]",
             task.id, task.title
         );
+        effort::count_turn(hub, &task.id);
         if let Err(error) = hub.send_cmd(&bot, Cmd::Prompt { text, call: None }) {
             tracing::warn!(bot, error = format!("{error:#}"), "stale task nudge not delivered");
         }
