@@ -19,17 +19,25 @@ const MAX_CRITERIA: usize = 12;
 const MAX_CRITERION: usize = 300;
 /// Bytes a proposed plan holds.
 const MAX_PLAN: usize = 6000;
+/// Questions a task asks the user before its plan.
+const MAX_QUESTIONS: usize = 3;
+/// Bytes one question holds.
+const MAX_QUESTION: usize = 300;
+/// Bytes one answer holds.
+const MAX_ANSWER: usize = 2000;
 
-/// Whether the user approves the claimer's plan before work starts (wire: `notNeeded` / `waiting` / `proposed` /
-/// `approved`).
+/// Whether the user approves the claimer's plan before work starts (wire: `notNeeded` / `waiting` / `asking` /
+/// `proposed` / `approved`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Approval {
     /// Work starts at once.
     #[default]
     NotNeeded,
-    /// Its claimer proposes a plan first.
+    /// Its claimer proposes a plan first (or asks the user questions first).
     Waiting,
+    /// The claimer's questions wait for the user's answers.
+    Asking,
     /// The plan waits for the user.
     Proposed,
     Approved,
@@ -50,6 +58,15 @@ pub struct Check {
     pub pass: bool,
     #[serde(default)]
     pub note: String,
+}
+
+/// A question a claimer asks the user before its plan, and the user's answer.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Question {
+    pub text: String,
+    #[serde(default)]
+    pub answer: Option<String>,
 }
 
 /// Acceptance criteria from a client or a bot: a list of strings, or one string with a criterion per line. Blank ones
@@ -85,6 +102,11 @@ pub fn propose(hub: &Hub, id: &str, bot: &str, plan: &str, acceptance: &Value) -
         ensure!(task.status == TaskStatus::Claimed, "this task is {}: claim it first", wire(task.status));
         check_claimer(hub, task, super::Actor::Bot(bot))?;
         ensure!(
+            task.approval != Approval::Asking,
+            "the user hasn't answered your questions about task {} yet: you'll be told",
+            task.id
+        );
+        ensure!(
             matches!(task.approval, Approval::Waiting | Approval::Proposed),
             "this task needs no approval: go ahead with the work"
         );
@@ -103,6 +125,70 @@ pub fn propose(hub: &Hub, id: &str, bot: &str, plan: &str, acceptance: &Value) -
         let body = format!("Plan for \"{}\" is waiting for your approval.", task.title);
         push::notify(hub, &row.config, None, &row.config.name, &body, AlertKind::NeedsInput);
     }
+    Ok(task)
+}
+
+/// The claimer asks the user up to 3 short questions before its plan, then waits for the answers. Once asked, the
+/// claimer proposes its plan with what the answers say, so it asks only once.
+pub fn ask(hub: &Hub, id: &str, bot: &str, questions: &Value) -> Result<Task> {
+    let questions = question_texts(questions)?;
+    let task = change(hub, id, |task| {
+        ensure!(task.status == TaskStatus::Claimed, "this task is {}: claim it first", wire(task.status));
+        check_claimer(hub, task, super::Actor::Bot(bot))?;
+        ensure!(task.approval == Approval::Waiting, "this task needs no questions: go ahead with the work");
+        ensure!(task.questions.is_empty(), "you already asked: propose_plan now");
+        task.questions = questions.into_iter().map(|text| Question { text, answer: None }).collect();
+        task.approval = Approval::Asking;
+        Ok(())
+    })?;
+    if let Ok(Some(row)) = hub.store.bot(bot) {
+        let body = format!("{} has questions about \"{}\".", row.config.name, task.title);
+        push::notify(hub, &row.config, None, &row.config.name, &body, AlertKind::NeedsInput);
+    }
+    Ok(task)
+}
+
+/// The questions from a client or a bot: a list of one-line strings, one to three of them.
+fn question_texts(value: &Value) -> Result<Vec<String>> {
+    let items = value.as_array().ok_or_else(|| anyhow!("questions is a list of 1 to {MAX_QUESTIONS} questions"))?;
+    let questions = items
+        .iter()
+        .map(|v| {
+            let q = text(v.as_str().unwrap_or_default(), "a question", MAX_QUESTION)?;
+            ensure!(!q.is_empty() && !q.contains('\n'), "a question is one nonempty line");
+            Ok(q)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    ensure!((1..=MAX_QUESTIONS).contains(&questions.len()), "ask 1 to {MAX_QUESTIONS} questions");
+    Ok(questions)
+}
+
+/// The user answers the claimer's questions, one answer per question, in order. The claimer is told to propose its
+/// plan with them.
+pub fn answer(hub: &Hub, id: &str, answers: &Value) -> Result<Task> {
+    let answers = answers.as_array().ok_or_else(|| anyhow!("answers is a list with one answer per question"))?;
+    let task = change(hub, id, |task| {
+        ensure!(task.approval == Approval::Asking, "this task has no questions waiting for answers");
+        ensure!(
+            answers.len() == task.questions.len(),
+            "answer each of the {} questions: {} answers given",
+            task.questions.len(),
+            answers.len()
+        );
+        for (question, answer) in task.questions.iter_mut().zip(answers) {
+            question.answer = Some(text(answer.as_str().unwrap_or_default(), "an answer", MAX_ANSWER)?);
+        }
+        task.approval = Approval::Waiting;
+        Ok(())
+    })?;
+    let mut prompt = format!(
+        "[Codync: the user answered your questions about task {id}. Now propose_plan {id} using the answers, then wait.]\n",
+        id = task.id
+    );
+    for question in &task.questions {
+        let _ = write!(prompt, "\nQ: {}\nA: {}", question.text, question.answer.as_deref().unwrap_or_default());
+    }
+    tell(hub, &task, prompt);
     Ok(task)
 }
 
@@ -154,6 +240,7 @@ pub fn revise(hub: &Hub, id: &str, note: &str) -> Result<Task> {
 pub fn ensure_cleared(task: &Task) -> Result<()> {
     match task.approval {
         Approval::Waiting => bail!("propose_plan {} first: the user approves the plan before any work", task.id),
+        Approval::Asking => bail!("the user hasn't answered your questions about task {} yet: you'll be told", task.id),
         Approval::Proposed => bail!("the user hasn't approved the plan of task {} yet: you'll be told", task.id),
         Approval::NotNeeded | Approval::Approved => Ok(()),
     }
@@ -224,6 +311,18 @@ pub fn work_order(task: &Task) -> String {
     }
     match (task.approval, &task.plan) {
         (Approval::Waiting, _) => {
+            if task.questions.is_empty() {
+                let _ = write!(
+                    out,
+                    "\n\nIf what to make, for whom, with which tools or materials, or what counts as done is unclear, \
+                     first ask_user {} up to 3 short questions (only ones whose answer changes the work) and stop; if \
+                     it is clear, go straight to propose_plan.",
+                    task.id
+                );
+            }
+            for question in &task.questions {
+                let _ = write!(out, "\n\nQ: {}\nA: {}", question.text, question.answer.as_deref().unwrap_or_default());
+            }
             let _ = write!(
                 out,
                 "\n\nThe user approves the plan before any work: first propose_plan {} with the steps or parts and who \
@@ -231,6 +330,9 @@ pub fn work_order(task: &Task) -> String {
                  when it is approved or what to change.",
                 task.id
             );
+        }
+        (Approval::Asking, _) => {
+            out.push_str("\n\nYour questions wait for the user's answers: don't start until you're told.");
         }
         (Approval::Proposed, _) => {
             out.push_str("\n\nIts plan waits for the user's approval: don't start until you're told.");

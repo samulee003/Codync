@@ -25,6 +25,7 @@ pub mod git;
 mod manage;
 pub mod order;
 pub mod sheet;
+mod stale;
 pub mod tools;
 
 pub use manage::{assign, delete, edit, merge, set_status};
@@ -52,6 +53,8 @@ pub struct Board {
     sheets: Mutex<()>,
     /// The job each bot last worked on, so a new one starts with a fresh session (`focus`).
     focus: focus::Focus,
+    /// The stuck tasks a bot was already poked about, and when (`stale`).
+    stale: stale::Poked,
 }
 
 /// Where a task stands (wire values: `open` / `claimed` / `checking` / `review` / `done` / `cancelled`).
@@ -129,6 +132,9 @@ pub struct Task {
     pub plan: Option<String>,
     #[serde(default)]
     pub approval: brief::Approval,
+    /// Questions the claimer asks the user before its plan, with the user's answers (`brief::ask`, `brief::answer`).
+    #[serde(default)]
+    pub questions: Vec<brief::Question>,
     /// The latest check, criterion by criterion.
     #[serde(default)]
     pub checks: Vec<brief::Check>,
@@ -288,6 +294,7 @@ pub fn create(hub: &Hub, by: Actor<'_>, new: &NewTask<'_>) -> Result<Task> {
         acceptance: new.acceptance.clone(),
         plan: None,
         approval: brief::Approval::asked(new.approve_plan),
+        questions: vec![],
         checks: vec![],
         after: new.after.clone(),
         assignee: None,

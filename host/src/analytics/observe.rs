@@ -175,11 +175,12 @@ fn call_event(method: &str, b: &Value, p: &mut Map<String, Value>) -> Option<Eve
         }
         // The team board (`board`): what changed and who changed it, never a task's text.
         "createTask" | "editTask" | "noteTask" | "assignTask" | "setTaskStatus" | "mergeTask" | "deleteTask"
-        | "splitGoal" | "setBotClass" | "approvePlan" | "revisePlan" => {
+        | "splitGoal" | "setBotClass" | "approvePlan" | "revisePlan" | "answerQuestions" => {
             let action = match method {
                 "setBotClass" => Some("class"),
                 "approvePlan" => Some("approve_plan"),
                 "revisePlan" => Some("revise_plan"),
+                "answerQuestions" => Some("answer_questions"),
                 "setTaskStatus" => b["status"].as_str().filter(|s| matches!(*s, "open" | "done" | "cancelled")),
                 "splitGoal" => Some("split"),
                 other => other.strip_suffix("Task"),

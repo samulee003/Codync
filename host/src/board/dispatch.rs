@@ -46,6 +46,7 @@ pub async fn dispatch_loop(hub: Arc<Hub>) {
         if let Err(error) = dispatch(&hub) {
             tracing::warn!(error = format!("{error:#}"), "board dispatch failed");
         }
+        super::stale::check(&hub);
     }
 }
 
@@ -225,6 +226,7 @@ mod tests {
             acceptance: vec![],
             plan: None,
             approval: super::super::brief::Approval::NotNeeded,
+            questions: vec![],
             checks: vec![],
             after: vec![],
             assignee: None,

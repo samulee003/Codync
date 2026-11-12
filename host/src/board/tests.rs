@@ -4,6 +4,9 @@ use crate::store::BotConfig;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+mod ask;
+mod stuck;
+
 fn hub() -> Arc<Hub> {
     let dir = std::env::temp_dir().join(format!("codync-board-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();

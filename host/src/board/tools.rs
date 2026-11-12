@@ -6,12 +6,13 @@ use crate::hub::Hub;
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
-pub const TOOLS: [&str; 9] = [
+pub const TOOLS: [&str; 10] = [
     "list_tasks",
     "read_task",
     "create_task",
     "claim_task",
     "propose_plan",
+    "ask_user",
     "note_task",
     "finish_task",
     "release_task",
@@ -23,7 +24,7 @@ that fits you better than your teammates. To split a job with parts others can d
 subtasks (create_task with parentId) and coordinate: you are told when they are all finished, then assemble the \
 result. To take a task, claim_task it (one claimer per task, so two bots never do the same work), then read_task for \
 its notes. A task may have acceptance criteria: the check marks each pass or fail, so meet every one. When the \
-user approves a task's plan first, propose_plan before any work and wait to be told it is approved. Share what others could use (a finding, a decision, a blocker) with note_task. A task in a git project \
+user approves a task's plan first, propose_plan before any work and wait to be told it is approved; if what to make is unclear, ask_user first (up to 3 questions) and wait for the answers. Share what others could use (a finding, a decision, a blocker) with note_task. A task in a git project \
 gives you its own worktree and branch when you claim it: work and commit only there, never in the project's own \
 checkout. End with finish_task and a summary of what you did and how you checked it, or release_task when you can't \
 do it. Another bot then checks your work and may send it back with what to fix; when you are asked to check a task, \
@@ -85,6 +86,15 @@ pub fn schemas() -> Vec<Value> {
                 "plan": {"type": "string", "description": "Your size call, then the steps or parts and who does each. At most 6000 bytes."},
                 "acceptance": {"type": "array", "items": {"type": "string"}, "description": "The acceptance criteria: checkable, one per item (at most 12). Required when the task has none; replaces its criteria when given."},
             }, "required": ["taskId", "plan"]},
+            "annotations": {"readOnlyHint": false, "idempotentHint": false},
+        }),
+        json!({
+            "name": "ask_user",
+            "description": "For a task you claimed whose plan the user approves first, when what to make, for whom, with which tools or materials, or what counts as done is unclear: ask the user up to 3 short questions, then stop and wait. You're told when they answer; then propose_plan.",
+            "inputSchema": {"type": "object", "properties": {
+                "taskId": id,
+                "questions": {"type": "array", "items": {"type": "string"}, "description": "1 to 3 questions, one line each (at most 300 bytes), only ones whose answer changes the work."},
+            }, "required": ["taskId", "questions"]},
             "annotations": {"readOnlyHint": false, "idempotentHint": false},
         }),
         json!({
@@ -179,6 +189,7 @@ pub async fn call(hub: &Hub, bot: &str, name: &str, args: &Value) -> Result<Valu
             let plan = args["plan"].as_str().unwrap_or_default();
             super::brief::propose(hub, id()?, bot, plan, &args["acceptance"])?
         }
+        "ask_user" => super::brief::ask(hub, id()?, bot, &args["questions"])?,
         "note_task" => {
             let task = super::note(hub, id()?, Actor::Bot(bot), args["text"].as_str().unwrap_or_default())?;
             super::sheet::record(hub, bot, super::sheet::Deed::Note);
@@ -250,7 +261,7 @@ fn full(hub: &Hub, task: &Task) -> Value {
         "id": task.id, "title": task.title, "detail": task.detail, "status": task.status, "project": task.project,
         "createdBy": who(&task.created_by), "claimedBy": name(&task.claimed_by), "checkedBy": name(&task.reviewer),
         "parentId": task.parent, "subtasks": subtasks,
-        "acceptance": task.acceptance, "approval": task.approval, "plan": task.plan, "checks": task.checks,
+        "acceptance": task.acceptance, "approval": task.approval, "questions": task.questions, "plan": task.plan, "checks": task.checks,
         "waitsFor": super::order::waiting_on(&hub.store, task).iter().map(|t| json!({"id": t.id, "title": t.title})).collect::<Vec<_>>(),
         "assignee": name(&task.assignee),
         "branch": task.branch, "worktree": task.worktree, "notes": notes, "summary": task.summary,

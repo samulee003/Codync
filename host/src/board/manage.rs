@@ -41,6 +41,7 @@ pub async fn set_status(hub: &Hub, id: &str, status: TaskStatus) -> Result<Task>
             if task.approval != Approval::NotNeeded {
                 task.approval = Approval::Waiting;
                 task.plan = None;
+                task.questions.clear();
             }
         }
         Ok(())
