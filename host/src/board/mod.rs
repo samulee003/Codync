@@ -20,6 +20,7 @@ use std::sync::Mutex;
 pub mod brief;
 pub mod dispatch;
 pub mod flow;
+mod focus;
 pub mod git;
 mod manage;
 pub mod sheet;
@@ -48,6 +49,8 @@ pub struct Board {
     nudges: dispatch::Nudges,
     /// Serializes changes to the bots' character sheets (`sheet`).
     sheets: Mutex<()>,
+    /// The job each bot last worked on, so a new one starts with a fresh session (`focus`).
+    focus: focus::Focus,
 }
 
 /// Where a task stands (wire values: `open` / `claimed` / `checking` / `review` / `done` / `cancelled`).

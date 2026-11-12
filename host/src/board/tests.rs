@@ -506,3 +506,30 @@ async fn a_check_marks_every_criterion_and_one_failure_sends_it_back() {
         brief::Check { criterion: "Adds up to 180 minutes".into(), pass: true, note: "175 + 5".into() }
     );
 }
+
+#[tokio::test]
+async fn a_new_job_starts_a_bot_afresh_but_parts_of_one_goal_keep_its_session() {
+    let hub = hub();
+    let goal = new_task(&hub, "Run the workshop", None);
+    let part = |title: &str| {
+        let new = NewTask {
+            title,
+            detail: "",
+            project: None,
+            parent: Some(&goal.id),
+            acceptance: vec![],
+            approve_plan: false,
+        };
+        create(&hub, Actor::User, &new).unwrap()
+    };
+    let (slides, guide) = (part("Slides"), part("Guide"));
+    let other = new_task(&hub, "Fix the printer", None);
+    assert!(focus::switch(&hub, "ada", &goal), "a first job");
+    assert!(!focus::switch(&hub, "ada", &goal), "the same task");
+    assert!(!focus::switch(&hub, "ada", &slides), "a part of the goal it is on");
+    assert!(!focus::switch(&hub, "ada", &guide));
+    assert!(focus::switch(&hub, "ada", &other), "another job");
+    assert!(focus::switch(&hub, "bo", &guide), "each bot has its own");
+    focus::note(&hub, "ada", &slides);
+    assert!(!focus::switch(&hub, "ada", &goal), "claiming a part moved it back to the goal");
+}

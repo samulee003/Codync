@@ -110,6 +110,7 @@ pub async fn assign(hub: &Hub, id: &str, bot: &str, by: Actor<'_>) -> Result<Tas
         Actor::User => "the user".to_owned(),
         Actor::Bot(lead) => hub.bot_name(lead),
     };
+    super::focus::begin(hub, &row.config.id, &task);
     hub.send_cmd(&row.config.id, Cmd::Prompt { text: assigned_prompt(&task, &who), call: None })?;
     Ok(task)
 }

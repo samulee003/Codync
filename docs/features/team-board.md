@@ -56,8 +56,33 @@ A user's work never sits for the fastest bot to grab whole:
 - **Checking.** `finish_task` puts the task in `checking` with a checker: another bot that takes part, idle ones first,
   then the one holding fewest tasks. The checker gets a turn to look at the result itself and answer `review_task
   {taskId, approve, feedback}`: accepted, the task goes to `review` (a branch to merge) or `done`; sent back, the
-  feedback becomes a note ("Sent back: …") and the claimer gets the task again with it. After two send-backs, or with
-  no other bot, a finish settles without a check.
+  feedback becomes a note ("Sent back: …") and the claimer gets the task again with it. A task with acceptance criteria
+  is checked criterion by criterion (`review_task {taskId, checks: [{criterion, pass, note}]}`, every criterion once;
+  a failing one needs a note): it is accepted only when all pass, the verdicts are kept on the task (`checks`), and the
+  failures go back as the note. After two send-backs the next finish goes to the user (`review`, with a note) instead
+  of counting unchecked; with no other bot, a finish settles without a check.
+
+## Work orders (`board/brief.rs`)
+
+A trial on real work (a three-hour workshop's materials) found what decides quality is the brief, not the number of
+bots: a checker noted an inconsistency and still passed the work. So a task is a work order:
+
+- **Acceptance criteria** (`acceptance`, up to 12 one-line criteria): what must hold for the result to count as done.
+  The user writes them when adding a task (`createTask {acceptance}`, a list or one per line), the lead writes or
+  sharpens them in its plan, and every subtask carries its own (`create_task {acceptance}`).
+- **Plan first** (`approval`: `notNeeded` / `waiting` / `proposed` / `approved`). A task the user adds waits for its
+  claimer's plan unless they turn it off (`createTask {approvePlan: false}`): the claimer calls `propose_plan {taskId,
+  plan, acceptance?}` (criteria required by then) and stops; the user gets a *needs you* alert and answers
+  `approvePlan {taskId}` (the claimer carries it out) or `revisePlan {taskId, note}` (the note says what to change, the
+  claimer proposes again). Until it is approved the task can't be finished or split. Reopening a task asks for a plan
+  again. The status stays `claimed`, so older apps show it as in progress.
+
+## A fresh session per job (`board/focus.rs`)
+
+Before a bot is handed board work from a job it wasn't on (planning, an assignment or a check; a job is a task with
+its subtasks), its agent session starts afresh (`Cmd::NewSession`), unless it is mid-turn. A trial showed why: a lead
+that had built a task once read a new task with the same title as a repeat and stopped. Parts of one goal keep the
+session; the user's chat stays as it was.
 
 ## Character sheets (`board/sheet.rs`)
 
@@ -106,13 +131,16 @@ task removes its worktree and keeps its branch, so no commit is lost. `GIT_*` va
 ## Bots' tools
 
 On every bot's `team` MCP server, next to `list_bots` and `message_bot`: `list_tasks` (`status`, `mine`), `read_task`,
-`create_task` (project defaults to the bot's folder; `parentId` for a subtask; `assignee` hands it to a teammate), `claim_task` (answers `workIn` with the
-worktree), `note_task`, `finish_task` (`summary` required), `release_task` (`reason` becomes a note) and `review_task`
-(`approve`, `feedback`). `read_task` includes `checkedBy`, `parentId` and the `subtasks` with their summaries.
+`create_task` (project defaults to the bot's folder; `parentId` for a subtask; `assignee` hands it to a teammate;
+`acceptance`), `claim_task` (answers `workIn` with the worktree and `workOrder` with the criteria and whether to propose a
+plan first), `propose_plan` (`plan`, `acceptance`), `note_task`, `finish_task` (`summary` required), `release_task`
+(`reason` becomes a note) and `review_task` (`checks` per criterion, or `approve`; `feedback`). `read_task` includes
+`checkedBy`, `parentId`, the `subtasks` with their summaries, `acceptance`, `approval`, `plan` and `checks`.
 
 ## App methods and sync
 
-`tasks`, `createTask {title, detail?, project?}` (the lead plans it), `editTask {taskId, title?, detail?}`, `noteTask {taskId, text}`,
+`tasks`, `createTask {title, detail?, project?, acceptance?, approvePlan?}` (the lead plans it), `approvePlan {taskId}`,
+`revisePlan {taskId, note}`, `editTask {taskId, title?, detail?}`, `noteTask {taskId, text}`,
 `assignTask {taskId, botId}` (claims the task for the bot and starts a turn in its own chat), `setTaskStatus {taskId,
 status: open|done|cancelled}`, `mergeTask {taskId}`, `deleteTask {taskId}`. Tasks are kept in kv `board.task.<id>`,
 each change stamped with a rev and sent as `{"type": "task", "task": …}`; the catch-up replays changes after `since`,

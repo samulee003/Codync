@@ -160,7 +160,11 @@ pub async fn call(hub: &Hub, bot: &str, name: &str, args: &Value) -> Result<Valu
                 None => task,
             }
         }
-        "claim_task" => super::claim(hub, id()?, bot).await?,
+        "claim_task" => {
+            let task = super::claim(hub, id()?, bot).await?;
+            super::focus::note(hub, bot, &task);
+            task
+        }
         "propose_plan" => {
             let plan = args["plan"].as_str().unwrap_or_default();
             super::brief::propose(hub, id()?, bot, plan, &args["acceptance"])?

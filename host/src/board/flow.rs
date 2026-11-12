@@ -59,6 +59,7 @@ pub(super) fn checker(hub: &Hub, claimer: &str) -> Option<String> {
 pub fn plan(hub: &Hub, id: &str, split: bool) -> Result<Value> {
     let lead = dispatch::lead(hub)?;
     let task = take(hub, id, &lead.id)?;
+    super::focus::begin(hub, &lead.id, &task);
     send(hub, &lead.id, plan_prompt(&task, split, &teammates(hub, &lead.id)));
     Ok(json!({"botId": lead.id, "name": lead.name}))
 }
@@ -199,6 +200,7 @@ pub struct Verdict<'a> {
 pub(super) fn after_finish(hub: &Hub, task: &Task) {
     match (&task.status, &task.reviewer, &task.claimed_by) {
         (TaskStatus::Checking, Some(reviewer), Some(claimer)) => {
+            super::focus::begin(hub, reviewer, task);
             let name = hub.bot_name(claimer);
             send(
                 hub,
