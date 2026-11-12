@@ -76,6 +76,20 @@ bots: a checker noted an inconsistency and still passed the work. So a task is a
   `approvePlan {taskId}` (the claimer carries it out) or `revisePlan {taskId, note}` (the note says what to change, the
   claimer proposes again). Until it is approved the task can't be finished or split. Reopening a task asks for a plan
   again. The status stays `claimed`, so older apps show it as in progress.
+- **Asking before planning.** A claimer whose task waits for a plan may first call `ask_user {taskId, questions}` with
+  up to 3 short questions, each up to 300 bytes, and only when an answer changes the work. The task is then `approval:
+  asking` (it counts as waiting for the user, like a proposed plan) and the claimer waits. The user answers all of them
+  at once with `answerQuestions {taskId, answers}` (one answer per question, up to 2000 bytes each); the claimer is then
+  told the answers and proposes its plan with them. It asks only once: after the answers it may only `propose_plan`.
+  `propose_plan` is refused while questions wait for answers.
+
+## Stuck tasks come back (`board/stale.rs`)
+
+A claimed task that sits unchanged for 20 minutes (`updatedAt`) is nudged once, in its claimer's own chat, to carry on
+and `finish_task` it or `release_task` it with why; the nudge is sent only while that bot is free, and counts a turn. If
+the task still hasn't moved 20 minutes after the nudge, the host releases it to the board (with the note "no progress for
+a while") for another bot. A task that moves again is forgotten. A task waiting on the user (`asking` or `proposed`) or
+on its unfinished subtasks is never stale. Each dispatch tick runs the check.
 
 ## Tasks in order (`board/order.rs`)
 
@@ -125,6 +139,22 @@ top of a bot's details (class picker, level and experience, stamina, ability cha
 bot*, and the level beside the name in the roster from level 2. iPhone, Android and the terminal UI follow once the
 design has settled.
 
+## Lessons, templates and effort
+
+- **Lessons from checks** (`board/lessons.rs`). When a checker sends a bot's work back, the feedback (whitespace collapsed,
+  at most 400 bytes on a character boundary) is kept as a lesson for that bot, with the task's title. kv
+  `board.lessons.<botId>` holds the bot's last 20, newest first. The 5 most recent are quoted in the prompts that hand
+  it work: the assignment, the planning prompt of a lead, and the answer to `claim_task` (`lessons`), each as "don't
+  repeat these". `botLessons {botId}` lists them and `forgetLessons {botId}` clears them.
+- **Task templates** (`board/template.rs`). `saveTaskTemplate {taskId, name?}` saves a task's title, detail, acceptance
+  criteria, project and whether its plan is approved first (`approvePlan`) as a template named `name` (default: the
+  title). kv `board.template.<id>`; at most 50, listed by name with `taskTemplates`, removed with
+  `deleteTaskTemplate {templateId}`. A new task starts from one by filling the same fields.
+- **Effort** (`board/effort.rs`). A task keeps `startedAt` (its first claim, kept on later claims), `finishedAt` (set each
+  time it reaches `review` or `done`) and `turns`, the host-started turns about it (counted when a prompt about the task
+  is sent). Clients show `{turns} turns · {minutes} min` when `turns` is above 0; the minutes run from start to finish
+  and are 0 until it finishes.
+
 ## Git worktrees
 
 When a task's project is the top of a git repository with a commit, `claim` runs
@@ -142,31 +172,43 @@ task removes its worktree and keeps its branch, so no commit is lost. `GIT_*` va
 On every bot's `team` MCP server, next to `list_bots` and `message_bot`: `list_tasks` (`status`, `mine`), `read_task`,
 `create_task` (project defaults to the bot's folder; `parentId` for a subtask; `assignee` hands it to a teammate;
 `acceptance`; `after` lists the tasks it waits for), `claim_task` (answers `workIn` with the worktree and `workOrder` with the criteria and whether to propose a
-plan first), `propose_plan` (`plan`, `acceptance`), `note_task`, `finish_task` (`summary` required), `release_task`
-(`reason` becomes a note) and `review_task` (`checks` per criterion, or `approve`; `feedback`). `read_task` includes
+plan first), `propose_plan {taskId, plan, acceptance?}`, `ask_user {taskId, questions}` (before a plan, see
+Work orders above), `note_task`, `finish_task` (`summary` required), `release_task`
+(`reason` becomes a note) and `review_task` (`checks` per criterion, or `approve`; `feedback`). `claim_task` also answers
+`lessons`, the bot's latest lessons from checks. `read_task` includes
 `checkedBy`, `parentId`, the `subtasks` with their summaries, `acceptance`, `approval`, `plan`, `checks`, `waitsFor` and
 `assignee`; `list_tasks` marks a task still `waiting`.
 
 ## App methods and sync
 
-`tasks`, `createTask {title, detail?, project?, acceptance?, approvePlan?, after?}` (the lead plans it), `approvePlan {taskId}`,
-`revisePlan {taskId, note}`, `editTask {taskId, title?, detail?}`, `noteTask {taskId, text}`,
+`tasks` (answers the tasks and `optedOut`), `createTask {title, detail?, project?, acceptance?, approvePlan?, after?}`
+(the lead plans it), `approvePlan {taskId}`, `revisePlan {taskId, note}`, `answerQuestions {taskId, answers}`,
+`editTask {taskId, title?, detail?}`, `noteTask {taskId, text}`,
 `assignTask {taskId, botId}` (claims the task for the bot and starts a turn in its own chat), `setTaskStatus {taskId,
-status: open|done|cancelled}`, `mergeTask {taskId}`, `deleteTask {taskId}`. Tasks are kept in kv `board.task.<id>`,
+status: open|done|cancelled}`, `mergeTask {taskId}`, `deleteTask {taskId}`, `setBoardClaims {botId, on}`, `splitGoal
+{goal}`, `botLessons {botId}`, `forgetLessons {botId}`, `taskTemplates`, `saveTaskTemplate {taskId, name?}` and
+`deleteTaskTemplate {templateId}`. Tasks are kept in kv `board.task.<id>`,
 each change stamped with a rev and sent as `{"type": "task", "task": …}`; the catch-up replays changes after `since`,
-and a deleted task stays as a tombstone (`deleted: true`) so clients drop it. Older apps ignore the event.
+and a deleted task stays as a tombstone (`deleted: true`) so clients drop it. Older apps ignore the event. A task carries
+its `acceptance`, `plan`, `approval`, `questions` (with `answer`), `checks`, `after`, `assignee`, `startedAt`,
+`finishedAt` and `turns`. A client should read an `approval` it doesn't know as `notNeeded` (the terminal UI does), so a
+newer host's task still shows.
 
 ## Clients
 
-Every client shows the `checking` column (*Being checked*), who checks a task (*Checked by {name}*) and the task a
-subtask is part of (*↳ title*).
+Every client shows the *Waiting for you* column (tasks whose plan or questions wait for the user, first), the `checking`
+column (*Being checked*), who checks a task (*Checked by {name}*), the task a subtask is part of (*↳ title*), and each
+task's work order: its acceptance criteria with the check's marks, its plan and its questions.
 
 | Client | Where | Actions |
 |---|---|---|
-| Desktop | `checklist` button in the sidebar header (and rail) → sheet (`views/board/`) | `+` new task (folder from the workspace picker), wand: split a goal, unfold a task for detail and notes, add a note, menu: assign to a bot, merge, reopen, mark done, cancel, delete; a switch per bot for claiming on its own |
-| iPhone | `checklist` toolbar button on the roster → sheet (`CodyncUI/Board/`) | same |
-| Android | `checklist` button in the roster header → sheet (`BoardView.kt`, `BoardSheets.kt`) | same |
-| Terminal UI | `B` or the palette's *Team board* (`tui/manage/board.rs`) | `n` new (folder typed as a path), `s` split a goal, `p` bots that claim, `↵` unfold, `c` note, `a` assign, `m` merge, `o` reopen, `d` done, `x` cancel, `X` delete |
+| Desktop | `checklist` button in the sidebar header (and rail) → sheet (`views/board/`) | `+` new task (criteria, and a **Template** chooser), wand: split a goal, unfold a task for detail, notes and effort (`{turns} turns · {minutes} min`), menu: **Save as template**, assign to a bot, merge, reopen, mark done, cancel, delete; approve or ask for changes to a plan, answer questions; a switch per bot for claiming on its own |
+| iPhone | `checklist` toolbar button on the roster → sheet (`CodyncUI/Board/`) | work orders: approve or ask for changes to a plan, answer questions, criteria in the new-task form; no effort line, no templates |
+| Android | `checklist` button in the roster header → sheet (`BoardView.kt`, `BoardSheets.kt`, `TaskWorkOrder.kt`) | as iPhone |
+| Terminal UI | `B` or the palette's *Team board* (`tui/manage/board.rs`, `tui/manage/board_work.rs`, `tui/sheets/board_work_view.rs`) | `n` new (criteria after the title, `;` between them), `s` split a goal, `p` bots that claim, `↵` unfold, `y` approve the plan, `r` ask for changes, `i` answer the questions, `c` note, `a` assign, `m` merge, `o` reopen, `d` done, `x` cancel, `X` delete; the effort line when unfolded, no templates |
+
+Lessons from checks have no screen in any client yet: the host keeps them and quotes them to the bots. Templates are
+desktop only.
 
 The board button shows only for a computer whose host is 2.41.0 or newer. Analytics: `task_changed` (`action`, `by`)
 and the `board` screen ([analytics events](../reference/analytics-events.md)).

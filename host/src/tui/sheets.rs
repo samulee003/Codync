@@ -11,6 +11,7 @@ use crate::tui::l10n::tr;
 use serde_json::Value;
 
 mod board_view;
+mod board_work_view;
 mod gear_view;
 mod library_view;
 mod market_view;

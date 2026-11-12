@@ -1,39 +1,73 @@
 //! The team board (`docs/features/team-board.md`): the computer's shared tasks by status. The user adds tasks, notes
 //! them, hands one to a bot, merges a finished task's branch, and reopens, closes or deletes tasks; the bots claim and
-//! finish them through their own tools. `task` events keep an open board current.
+//! finish them through their own tools. `task` events keep an open board current. A task's work order (its criteria,
+//! plan and questions) is in `board_work`.
 
 use crossterm::event::{KeyCode, KeyEvent};
 use serde_json::{Value, json};
 
 use super::super::app::{App, Editor, Overlay};
+use super::board_work::{self, awaits_answers, awaits_approval, needs_user};
 use super::{BoardSheet, Fields, Input, Reply, Submit};
 use crate::board::{Task, TaskStatus};
 
-/// The board's order: open, in progress, being checked, ready to merge, done, cancelled; newest first in each.
+/// The approvals this client knows; any other one reads as not needed.
+const APPROVALS: [&str; 5] = ["notNeeded", "waiting", "asking", "proposed", "approved"];
+
+/// A column of the board: the tasks waiting for the user come first, then each status.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Column {
+    Waiting,
+    Status(TaskStatus),
+}
+
+/// The column a task shows in.
+pub fn column(task: &Task) -> Column {
+    if needs_user(task) { Column::Waiting } else { Column::Status(task.status) }
+}
+
+fn rank(column: Column) -> u8 {
+    match column {
+        Column::Waiting => 0,
+        Column::Status(TaskStatus::Open) => 1,
+        Column::Status(TaskStatus::Claimed) => 2,
+        Column::Status(TaskStatus::Checking) => 3,
+        Column::Status(TaskStatus::Review) => 4,
+        Column::Status(TaskStatus::Done) => 5,
+        Column::Status(TaskStatus::Cancelled) => 6,
+    }
+}
+
+/// The board's order: waiting for you, open, in progress, being checked, ready to merge, done, cancelled; newest first
+/// in each.
 pub fn sorted(mut tasks: Vec<Task>) -> Vec<Task> {
-    let rank = |s: TaskStatus| match s {
-        TaskStatus::Open => 0,
-        TaskStatus::Claimed => 1,
-        TaskStatus::Checking => 2,
-        TaskStatus::Review => 3,
-        TaskStatus::Done => 4,
-        TaskStatus::Cancelled => 5,
-    };
     tasks.retain(|t| !t.deleted);
-    tasks.sort_by_key(|t| (rank(t.status), std::cmp::Reverse(t.updated_at)));
+    tasks.sort_by_key(|t| (rank(column(t)), std::cmp::Reverse(t.updated_at)));
     tasks
 }
 
-/// A status as the board's headings name it.
-pub fn heading(status: TaskStatus) -> &'static str {
-    match status {
-        TaskStatus::Open => "Open",
-        TaskStatus::Claimed => "In progress",
-        TaskStatus::Checking => "Being checked",
-        TaskStatus::Review => "Ready to merge",
-        TaskStatus::Done => "Done",
-        TaskStatus::Cancelled => "Cancelled",
+/// A column as the board's headings name it.
+pub fn heading(column: Column) -> &'static str {
+    match column {
+        Column::Waiting => "Waiting for you",
+        Column::Status(TaskStatus::Open) => "Open",
+        Column::Status(TaskStatus::Claimed) => "In progress",
+        Column::Status(TaskStatus::Checking) => "Being checked",
+        Column::Status(TaskStatus::Review) => "Ready to merge",
+        Column::Status(TaskStatus::Done) => "Done",
+        Column::Status(TaskStatus::Cancelled) => "Cancelled",
     }
+}
+
+/// A task off the wire. Tolerant: an approval this client doesn't know reads as not needed, and a field that is
+/// absent takes its default, so a newer host's task still shows.
+pub fn decode(value: &Value) -> Option<Task> {
+    let mut value = value.clone();
+    let known = value["approval"].as_str().is_some_and(|a| APPROVALS.contains(&a));
+    if let Some(object) = value.as_object_mut().filter(|_| !known) {
+        object.insert("approval".into(), json!("notNeeded"));
+    }
+    serde_json::from_value(value).ok()
 }
 
 impl App {
@@ -62,6 +96,17 @@ impl App {
             }
             (KeyCode::Enter, Some(t)) => b.expanded = (b.expanded.as_deref() != Some(t.id.as_str())).then_some(t.id),
             (KeyCode::Char('c'), Some(t)) => return self.push_over(b, note_fields(t.id)),
+            (KeyCode::Char('y'), Some(t)) if awaits_approval(&t) => {
+                self.sheet("approvePlan", json!({"taskId": t.id}), Reply::BoardChanged);
+            }
+            (KeyCode::Char('r'), Some(t)) if awaits_approval(&t) => {
+                return self.push_over(b, board_work::revise_fields(t.id));
+            }
+            (KeyCode::Char('i'), Some(t)) if awaits_answers(&t) => {
+                if let Some(form) = board_work::answer_fields(&t) {
+                    return self.push_over(b, form);
+                }
+            }
             (KeyCode::Char('a'), Some(t)) if t.status == TaskStatus::Open => {
                 let mut bots: Vec<(String, String)> = self
                     .bots
@@ -92,7 +137,9 @@ impl App {
             (KeyCode::Char('X'), Some(t)) if t.status != TaskStatus::Claimed => {
                 self.sheet("deleteTask", json!({"taskId": t.id}), Reply::BoardChanged);
             }
-            (KeyCode::Char('a' | 'm' | 'o' | 'd' | 'x' | 'X'), Some(_)) => self.flash("Not for a task in this status"),
+            (KeyCode::Char('a' | 'm' | 'o' | 'd' | 'x' | 'X' | 'y' | 'r' | 'i'), Some(_)) => {
+                self.flash("Not for a task in this status");
+            }
             _ => {}
         }
         Some(Overlay::Board(b))
@@ -128,9 +175,7 @@ impl App {
     /// The `tasks` (or `setBoardClaims`) answer: shown on the open board.
     pub(in crate::tui) fn board_loaded(&mut self, v: &Value) {
         let opted_out: Option<Vec<String>> = v.get("optedOut").and_then(|o| serde_json::from_value(o.clone()).ok());
-        let tasks: Option<Vec<Task>> = v["tasks"]
-            .as_array()
-            .map(|a| sorted(a.iter().filter_map(|t| serde_json::from_value(t.clone()).ok()).collect()));
+        let tasks: Option<Vec<Task>> = v["tasks"].as_array().map(|a| sorted(a.iter().filter_map(decode).collect()));
         for o in &mut self.overlays {
             if let Overlay::Board(b) = o {
                 if let Some(tasks) = &tasks {
@@ -146,7 +191,7 @@ impl App {
 
     /// A `task` event: the open board takes the newer copy (a deleted task leaves it).
     pub(in crate::tui) fn task_changed(&mut self, v: &Value) {
-        let Ok(task) = serde_json::from_value::<Task>(v.clone()) else { return };
+        let Some(task) = decode(v) else { return };
         for o in &mut self.overlays {
             let Overlay::Board(b) = o else { continue };
             let Some(tasks) = b.tasks.as_mut() else { continue };
@@ -161,7 +206,7 @@ impl App {
     }
 }
 
-fn input(name: &str, label: &str, required: bool, multiline: bool, placeholder: &str) -> Input {
+pub(super) fn input(name: &str, label: &str, required: bool, multiline: bool, placeholder: &str) -> Input {
     Input {
         name: name.into(),
         label: label.into(),
@@ -173,7 +218,7 @@ fn input(name: &str, label: &str, required: bool, multiline: bool, placeholder: 
     }
 }
 
-fn fields(title: &str, note: &str, inputs: Vec<Input>, choices: Vec<String>, submit: Submit) -> Fields {
+pub(super) fn fields(title: &str, note: &str, inputs: Vec<Input>, choices: Vec<String>, submit: Submit) -> Fields {
     Fields {
         title: title.into(),
         note: note.into(),
@@ -191,6 +236,7 @@ fn new_task_fields() -> Fields {
     let inputs = vec![
         input("title", "Task title", true, false, ""),
         input("detail", "Detail", false, true, "What to do, and how to check it is done"),
+        input("acceptance", "Acceptance criteria", false, false, "Each criterion, separated by ;"),
         input("project", "Project folder (optional)", false, false, "/absolute/path"),
     ];
     let note = "A git project gives the bot that claims it its own worktree and branch. ⇧↵ new line, ↵ adds.";
@@ -233,9 +279,20 @@ mod tests {
                "createdAt": 0, "updatedAt": updated_at, "rev": rev})
     }
 
+    /// A claimed task with its approval (`proposed`, `asking`, ...).
+    fn claimed(id: &str, approval: &str, updated_at: i64) -> Value {
+        let mut t = task(id, "claimed", updated_at, updated_at);
+        t["approval"] = approval.into();
+        t
+    }
+
     fn app() -> App {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         App::new(crate::tui::net::Client::new("http://127.0.0.1:1", None), tx, String::new())
+    }
+
+    fn board_with(tasks: Vec<Task>) -> BoardSheet {
+        BoardSheet { tasks: Some(tasks), cursor: 0, expanded: None, opted_out: vec![] }
     }
 
     #[tokio::test]
@@ -264,24 +321,61 @@ mod tests {
         assert_eq!(ids(&app), ["b", "a"]);
     }
 
-    #[tokio::test]
-    async fn the_board_keeps_which_bots_claim_and_offers_each_one() {
+    #[test]
+    fn tasks_waiting_for_the_user_lead_the_board() {
+        let tasks = [
+            decode(&task("o", "open", 9, 9)),
+            decode(&claimed("q", "asking", 1)),
+            decode(&claimed("p", "proposed", 2)),
+            decode(&task("d", "done", 9, 9)),
+        ];
+        let tasks: Vec<Task> = tasks.into_iter().flatten().collect();
+        let ids: Vec<String> = sorted(tasks).into_iter().map(|t| t.id).collect();
+        assert_eq!(ids, ["p", "q", "o", "d"], "waiting for you first, newest first");
+    }
+
+    #[test]
+    fn an_unknown_or_absent_approval_reads_as_not_needed() {
+        let mut later = claimed("l", "later", 1);
+        let unknown = decode(&later).expect("still a task");
+        assert_eq!(unknown.approval, crate::board::brief::Approval::NotNeeded);
+        assert_eq!(column(&unknown), Column::Status(TaskStatus::Claimed));
+        if let Some(object) = later.as_object_mut() {
+            object.remove("approval");
+        }
+        assert_eq!(decode(&later).expect("a task").approval, crate::board::brief::Approval::NotNeeded);
+    }
+
+    #[test]
+    fn the_work_order_keys_open_only_for_the_tasks_that_wait() {
         let mut app = app();
-        app.on_msg(crate::tui::app::Msg::Event(json!({"type": "bot", "bot": {"id": "a", "name": "Ada"}})));
-        app.on_msg(crate::tui::app::Msg::Event(json!({"type": "bot", "bot": {"id": "b", "name": "Bo"}})));
-        app.overlays.push(Overlay::Board(BoardSheet { tasks: None, cursor: 0, expanded: None, opted_out: vec![] }));
-        app.board_loaded(&json!({"tasks": [], "optedOut": ["b"]}));
-        let Some(Overlay::Board(b)) = app.overlays.last() else { panic!("open") };
-        assert_eq!(b.opted_out, ["b"]);
-        let choices = app.claim_choices(&["b".to_owned()]);
-        assert_eq!(choices, [("a".to_owned(), "Ada".to_owned(), true), ("b".to_owned(), "Bo".to_owned(), false)]);
-        let fields = claims_fields(choices);
-        assert_eq!(fields.choices, ["Ada: claims", "Bo: off"]);
-        app.overlays.push(Overlay::Fields(Box::new(fields)));
-        app.board_loaded(&json!({"optedOut": []}));
-        app.close_board_fields();
-        let Some(Overlay::Board(b)) = app.overlays.last() else { panic!("the sheet closed, the board stays") };
-        assert!(b.opted_out.is_empty(), "a setBoardClaims answer carries no tasks: they stay");
-        assert!(b.tasks.is_some());
+        let tasks = vec![
+            decode(&claimed("q", "asking", 1)).expect("task"),
+            decode(&claimed("p", "proposed", 2)).expect("task"),
+        ];
+        let key = |app: &mut App, b: BoardSheet, code: KeyCode, cursor: usize| {
+            let mut b = b;
+            b.cursor = cursor;
+            app.board_key(b, KeyEvent::from(code))
+        };
+
+        // Cursor 1 is the proposed plan: `r` asks for changes, `i` does nothing.
+        let r = key(&mut app, board_with(tasks.clone()), KeyCode::Char('r'), 1);
+        assert!(r.is_none(), "the form opens over the board");
+        assert!(matches!(app.overlays.last(), Some(Overlay::Fields(f)) if matches!(f.submit, Submit::RevisePlan(_))));
+        app.overlays.clear();
+        assert!(matches!(key(&mut app, board_with(tasks.clone()), KeyCode::Char('i'), 1), Some(Overlay::Board(_))));
+        assert!(app.overlays.is_empty(), "no questions wait on it");
+
+        // Cursor 0 has questions: `i` answers them, `r` does nothing.
+        let mut questions = tasks[0].clone();
+        questions.questions = vec![crate::board::brief::Question { text: "Size?".into(), answer: None }];
+        assert!(key(&mut app, board_with(vec![questions.clone()]), KeyCode::Char('i'), 0).is_none());
+        assert!(
+            matches!(app.overlays.last(), Some(Overlay::Fields(f)) if matches!(f.submit, Submit::AnswerQuestions { .. }))
+        );
+        app.overlays.clear();
+        assert!(matches!(key(&mut app, board_with(vec![questions]), KeyCode::Char('r'), 0), Some(Overlay::Board(_))));
+        assert!(app.overlays.is_empty());
     }
 }

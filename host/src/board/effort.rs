@@ -1,4 +1,4 @@
-//! What a task cost: when it was first claimed (`started_at`), when its work first counted as finished (`finished_at`)
+//! What a task cost: when it was first claimed (`started_at`), when its work last counted as finished (`finished_at`)
 //! and how many turns the host started for it (`turns`). The board keeps these on the task, so the apps show the effort
 //! next to it.
 

@@ -1,10 +1,13 @@
-//! The team board: tasks by status under their headings, the one under the cursor unfolded on ↵ (its detail, notes,
-//! summary and where its work is).
+//! The team board: tasks by column under their headings (the ones waiting for you first), the one under the cursor
+//! unfolded on ↵ (its work order, detail, notes, summary and where its work is).
 
+use super::board_work_view::{effort_line, work_order};
 use super::{App, Buffer, Rect, centered, footer, frame_box, name_of, put, row, rput, theme, u, window};
 use crate::board::{Task, TaskStatus};
 use crate::tui::l10n::tr;
-use crate::tui::manage::{BoardSheet, task_heading};
+use crate::tui::manage::{
+    BoardSheet, Column, awaits_answers, awaits_approval, task_column, task_heading, waiting_titles,
+};
 use crate::tui::md::truncate;
 use crate::tui::view::when;
 
@@ -29,8 +32,8 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, b: &BoardSheet) {
             let room = usize::from(inner.width.saturating_sub(14));
             for (y, line) in (inner.y..).zip(lines.iter().skip(window(at, h)).take(h)) {
                 match line {
-                    Line::Heading(status, count) => {
-                        let text = format!("{} · {count}", tr(task_heading(*status)));
+                    Line::Heading(column, count) => {
+                        let text = format!("{} · {count}", tr(task_heading(*column)));
                         put(buf, inner.x, y, inner.width, &text, t.dim.patch(t.panel));
                     }
                     Line::Task(i) => {
@@ -54,20 +57,38 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, b: &BoardSheet) {
         None,
         "n new · s split · p bots · ↵ more · c note · a assign · m merge · o/d/x reopen/done/cancel · X del",
     );
+    // The row above the keys is free: the task under the cursor says what it waits for.
+    let current = b.tasks.as_deref().and_then(|tasks| tasks.get(b.cursor));
+    if let Some(hint) = action_hint(current) {
+        put(buf, inner.x, inner.bottom() - 2, inner.width, &hint, t.text.patch(t.panel));
+    }
+}
+
+/// The keys that act on a task waiting for the user, in the words the other apps use.
+fn action_hint(task: Option<&Task>) -> Option<String> {
+    let task = task?;
+    if awaits_approval(task) {
+        Some(format!("y {} · r {}", tr("Approve plan"), tr("Ask for changes")))
+    } else if awaits_answers(task) {
+        Some("i answer the questions".to_owned())
+    } else {
+        None
+    }
 }
 
 enum Line {
-    Heading(TaskStatus, usize),
+    Heading(Column, usize),
     Task(usize),
     Detail(String),
 }
 
-/// The board's lines: a heading before each status's tasks, and the unfolded task's details under it.
+/// The board's lines: a heading before each column's tasks, and the unfolded task's details under it.
 fn lines(app: &App, tasks: &[Task], b: &BoardSheet) -> Vec<Line> {
     let mut out = vec![];
     for (i, task) in tasks.iter().enumerate() {
-        if i == 0 || tasks[i - 1].status != task.status {
-            out.push(Line::Heading(task.status, tasks.iter().filter(|x| x.status == task.status).count()));
+        let column = task_column(task);
+        if i == 0 || task_column(&tasks[i - 1]) != column {
+            out.push(Line::Heading(column, tasks.iter().filter(|x| task_column(x) == column).count()));
         }
         out.push(Line::Task(i));
         if b.expanded.as_deref() == Some(task.id.as_str()) {
@@ -77,12 +98,15 @@ fn lines(app: &App, tasks: &[Task], b: &BoardSheet) -> Vec<Line> {
     out
 }
 
-/// An unfolded task: its detail, where its work is, its summary and its notes, one line each.
+/// An unfolded task: its detail, its work order, where its work is, its effort, its summary and its notes, one line
+/// each.
 fn details(app: &App, task: &Task) -> Vec<String> {
     let mut out: Vec<String> = task.detail.lines().filter(|l| !l.trim().is_empty()).map(str::to_owned).collect();
+    out.extend(work_order(task));
     if let Some(at) = task.worktree.as_ref().or(task.project.as_ref()) {
         out.push(format!("▸ {at}"));
     }
+    out.extend(effort_line(task));
     if let Some(summary) = &task.summary {
         out.push(format!("✓ {}", summary.replace('\n', " ")));
     }
@@ -104,15 +128,31 @@ fn mark(status: TaskStatus) -> &'static str {
     }
 }
 
-/// Who holds it, who checks it, the task it is part of, its branch, and when it last changed.
+/// Who holds it, what it waits for, who it is for, what waits on the user, who checks it, the task it is part of, its
+/// branch, and when it last changed.
 fn meta(app: &App, tasks: &[Task], task: &Task) -> String {
+    let waits = waiting_titles(tasks, task);
+    let waits = (!waits.is_empty()).then(|| tr("Waits for {titles}").replace("{titles}", &waits.join(", ")));
+    let for_bot = (task.status == TaskStatus::Open)
+        .then(|| task.assignee.as_deref().map(|b| tr("For {name}").replace("{name}", &who(app, b))))
+        .flatten();
+    let asks = if awaits_approval(task) {
+        Some(tr("Plan waits for you").into_owned())
+    } else if awaits_answers(task) {
+        Some(tr("Has questions for you").into_owned())
+    } else {
+        None
+    };
     let checker = (task.status == TaskStatus::Checking)
         .then(|| task.reviewer.as_deref().map(|b| tr("Checked by {name}").replace("{name}", &who(app, b))))
         .flatten();
     let parent =
         task.parent.as_deref().and_then(|id| tasks.iter().find(|t| t.id == id)).map(|t| format!("↳ {}", t.title));
     let parts: Vec<String> = [
+        waits,
+        for_bot,
         task.claimed_by.as_deref().map(|b| who(app, b)),
+        asks,
         checker,
         parent,
         task.branch.clone(),

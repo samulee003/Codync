@@ -8,6 +8,7 @@
 mod agent;
 mod analytics;
 mod board;
+mod board_work;
 mod bot_chat;
 mod dev_servers;
 mod fields;
@@ -26,7 +27,8 @@ mod skill;
 mod when;
 
 pub use analytics::AnalyticsSheet;
-pub use board::heading as task_heading;
+pub use board::{Column, column as task_column, heading as task_heading};
+pub use board_work::{awaits_answers, awaits_approval, waiting_titles};
 pub use dev_servers::{DevServer, DevServerSummary, DevServersSheet, LogsView, summary as dev_server_summary};
 pub use fields::{handoff_fields, section_fields};
 pub use gear::{Gear, GearRow};
@@ -249,6 +251,14 @@ pub enum Submit {
     AssignTask {
         task: String,
         bots: Vec<String>,
+    },
+    /// The task whose proposed plan the user sends back with what to change.
+    RevisePlan(String),
+    /// A task's questions, asked one at a time: the task, its questions and the answers given so far.
+    AnswerQuestions {
+        task: String,
+        questions: Vec<String>,
+        answers: Vec<String>,
     },
 }
 
