@@ -1992,5 +1992,7 @@
   "Approve plan": "Утвердить план",
   "What to do: the result, the materials to use, and what not to do": "Что сделать: результат, какие материалы использовать и чего не делать",
   "Acceptance criteria, one per line: what must hold for it to count as done": "Критерии приёмки, по одному в строке: что должно выполняться, чтобы считать готовым",
-  "Approve the plan before work starts": "Утверждать план до начала работы"
+  "Approve the plan before work starts": "Утверждать план до начала работы",
+  "Waits for {titles}": "Ждёт: {titles}",
+  "For {name}": "Для {name}"
 }

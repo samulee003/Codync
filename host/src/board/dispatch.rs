@@ -42,6 +42,7 @@ pub async fn dispatch_loop(hub: Arc<Hub>) {
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         tick.tick().await;
+        super::order::release_ready(&hub).await;
         if let Err(error) = dispatch(&hub) {
             tracing::warn!(error = format!("{error:#}"), "board dispatch failed");
         }
@@ -51,7 +52,12 @@ pub async fn dispatch_loop(hub: Arc<Hub>) {
 /// Tells each idle bot that takes part about the open tasks, unless it already heard about these or is too tired
 /// (`flow::TIRED`).
 pub fn dispatch(hub: &Hub) -> Result<()> {
-    let open: Vec<super::Task> = super::list(&hub.store).into_iter().filter(|t| t.status == TaskStatus::Open).collect();
+    // A task still waiting for others, or kept for the teammate it was handed to, isn't up for grabs.
+    let open: Vec<super::Task> = super::list(&hub.store)
+        .into_iter()
+        .filter(|t| t.status == TaskStatus::Open && t.assignee.is_none())
+        .filter(|t| super::order::waiting_on(&hub.store, t).is_empty())
+        .collect();
     if open.is_empty() {
         return Ok(());
     }
@@ -175,6 +181,7 @@ pub fn split_goal(hub: &Hub, goal: &str) -> Result<Value> {
             parent: None,
             acceptance: vec![],
             approve_plan: true,
+            after: vec![],
         },
     )?;
     super::flow::plan(hub, &task.id, true)
@@ -219,6 +226,8 @@ mod tests {
             plan: None,
             approval: super::super::brief::Approval::NotNeeded,
             checks: vec![],
+            after: vec![],
+            assignee: None,
             created_at: 0,
             updated_at: 0,
             rev: 0,

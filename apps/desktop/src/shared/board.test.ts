@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { awaitsApproval, boardColumns, criteriaWithChecks, hasBoard, newerTask, parseCriteria, taskActions, taskByline, type BoardTask } from './board.ts'
+import { awaitsApproval, boardColumns, criteriaWithChecks, hasBoard, newerTask, parseCriteria, taskActions, taskByline, waitingFor, type BoardTask } from './board.ts'
 
 const task = (id: string, status: BoardTask['status'], updatedAt: number, extra: Partial<BoardTask> = {}): BoardTask => ({
   id, title: id, detail: '', project: null, status, createdBy: null, claimedBy: null, branch: null, worktree: null,
@@ -25,7 +25,7 @@ test('a task waiting for review merges only with a branch', () => {
 })
 
 test('a byline names the claimer, the checker and the task it is part of', () => {
-  const look = { name: (b: string) => b.toUpperCase(), parentTitle: (id: string) => (id === 'p' ? 'Workshop' : undefined), tr: (k: string) => k }
+  const look = { name: (b: string) => b.toUpperCase(), find: (id: string) => (id === 'p' ? task('p', 'open', 1, { title: 'Workshop' }) : undefined), tr: (k: string) => k }
   const checking = task('a', 'checking', 1, { claimedBy: 'ada', reviewer: 'bo', parent: 'p', notes: [{ by: null, text: 'x', at: 1 }] })
   assert.equal(taskByline(checking, look), 'ADA · Checked by BO · ↳ Workshop · 1 notes')
   assert.equal(taskByline(task('b', 'done', 1, { claimedBy: 'ada', reviewer: 'bo' }), look), 'ADA', 'checked: the checker no longer shows')
@@ -52,9 +52,21 @@ test('a plan waiting for the user shows first, and criteria pair with their late
   assert.deepEqual(columns[0].tasks.map((t) => t.id), ['a'])
   assert.deepEqual(columns.find((c) => c.status === 'claimed')?.tasks.map((t) => t.id), ['b'])
   assert.ok(awaitsApproval(waiting) && !awaitsApproval(working))
-  assert.match(taskByline(waiting, { name: (b) => b, parentTitle: () => undefined, tr: (k) => k }), /Plan waits for you/)
+  assert.match(taskByline(waiting, { name: (b) => b, find: () => undefined, tr: (k) => k }), /Plan waits for you/)
 
   assert.deepEqual(parseCriteria('- 180 minutes\n\n  * Cantonese \n• Offline'), ['180 minutes', 'Cantonese', 'Offline'])
   const checked = criteriaWithChecks({ acceptance: ['180 minutes', 'Cantonese'], checks: [{ criterion: 'Cantonese', pass: false, note: 'Part 3' }] })
   assert.deepEqual(checked, [{ criterion: '180 minutes', check: undefined }, { criterion: 'Cantonese', check: { criterion: 'Cantonese', pass: false, note: 'Part 3' } }])
+})
+
+test('an open task shows what it still waits for, and who it goes to', () => {
+  const base = { detail: '', project: null, createdBy: null, claimedBy: null, branch: null, worktree: null, notes: [], summary: null, createdAt: 1, updatedAt: 1, rev: 1 }
+  const helpers: BoardTask = { ...base, id: 'h', title: 'Text helpers', status: 'claimed' }
+  const merged: BoardTask = { ...base, id: 'm', title: 'Models', status: 'review', branch: 'codync/task-m' }
+  const api: BoardTask = { ...base, id: 'a', title: 'Public API', status: 'open', after: ['h', 'm', 'gone'], assignee: 'bo' }
+  const find = (id: string) => [helpers, merged, api].find((t) => t.id === id)
+  assert.deepEqual(waitingFor(api, find), ['Text helpers', 'Models'], 'a branch waiting to merge still holds it')
+  assert.equal(taskByline(api, { name: (b) => b.toUpperCase(), find, tr: (k) => k }), 'Waits for Text helpers, Models · For BO')
+  assert.deepEqual(waitingFor({ ...api, status: 'claimed' }, find), [], 'started: nothing to wait for')
+  assert.deepEqual(waitingFor(api, (id) => (id === 'h' ? { ...helpers, status: 'done' } : id === 'm' ? { ...merged, branch: null } : undefined)), [])
 })

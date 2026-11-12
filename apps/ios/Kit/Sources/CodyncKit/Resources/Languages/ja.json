@@ -1992,5 +1992,7 @@
   "Approve plan": "計画を承認",
   "What to do: the result, the materials to use, and what not to do": "やること：成果物、使う資料、してはいけないこと",
   "Acceptance criteria, one per line: what must hold for it to count as done": "受け入れ基準（1 行に 1 つ）：完了とみなす条件",
-  "Approve the plan before work starts": "作業前に計画を承認"
+  "Approve the plan before work starts": "作業前に計画を承認",
+  "Waits for {titles}": "{titles} 待ち",
+  "For {name}": "{name} 担当"
 }

@@ -66,7 +66,8 @@ pub fn schemas() -> Vec<Value> {
                 "project": {"type": "string", "description": "Absolute folder the work is in (default: your working directory). A git repository gives each claimer its own worktree."},
                 "parentId": {"type": "string", "description": "The task this is a part of."},
                 "acceptance": {"type": "array", "items": {"type": "string"}, "description": "What must hold for it to count as done, one checkable criterion each (at most 12): the check marks each pass or fail."},
-                "assignee": {"type": "string", "description": "A teammate's name: the subtask is claimed for them and they start on it at once. Leave it out to let any bot claim it."},
+                "assignee": {"type": "string", "description": "A teammate's name: the subtask is claimed for them and they start on it (once what it waits for is finished). Leave it out to let any bot claim it."},
+                "after": {"type": "array", "items": {"type": "string"}, "description": "Ids of tasks this one waits for (such as parts it builds on): it can't start until they are finished, then it starts on its own."},
             }, "required": ["title"]},
             "annotations": {"readOnlyHint": false, "idempotentHint": false},
         }),
@@ -147,6 +148,7 @@ pub async fn call(hub: &Hub, bot: &str, name: &str, args: &Value) -> Result<Valu
                 parent: args["parentId"].as_str(),
                 acceptance: super::brief::criteria(&args["acceptance"])?,
                 approve_plan: false,
+                after: super::order::after(&hub.store, &args["after"])?,
             };
             let task = super::create(hub, Actor::Bot(bot), &new)?;
             if task.parent.is_some() {
@@ -155,7 +157,15 @@ pub async fn call(hub: &Hub, bot: &str, name: &str, args: &Value) -> Result<Valu
             match args["assignee"].as_str().map(str::trim).filter(|a| !a.is_empty()) {
                 Some(name) => {
                     let to = teammate(hub, name)?;
-                    super::assign(hub, &task.id, &to, Actor::Bot(bot)).await?
+                    if super::order::waiting_on(&hub.store, &task).is_empty() {
+                        super::assign(hub, &task.id, &to, Actor::Bot(bot)).await?
+                    } else {
+                        // It goes to them once what it waits for is finished (`order::release_ready`).
+                        super::change(hub, &task.id, |t| {
+                            t.assignee = Some(to);
+                            Ok(())
+                        })?
+                    }
                 }
                 None => task,
             }
@@ -220,6 +230,7 @@ fn list(hub: &Hub, bot: &str, args: &Value) -> Value {
                 "id": t.id, "title": t.title, "status": t.status,
                 "claimedBy": t.claimed_by.as_deref().map(|b| hub.bot_name(b)),
                 "parentId": t.parent, "notes": t.notes.len(), "project": t.project, "approval": t.approval,
+                "waiting": !super::order::waiting_on(&hub.store, t).is_empty(),
             })
         })
         .collect();
@@ -240,6 +251,8 @@ fn full(hub: &Hub, task: &Task) -> Value {
         "createdBy": who(&task.created_by), "claimedBy": name(&task.claimed_by), "checkedBy": name(&task.reviewer),
         "parentId": task.parent, "subtasks": subtasks,
         "acceptance": task.acceptance, "approval": task.approval, "plan": task.plan, "checks": task.checks,
+        "waitsFor": super::order::waiting_on(&hub.store, task).iter().map(|t| json!({"id": t.id, "title": t.title})).collect::<Vec<_>>(),
+        "assignee": name(&task.assignee),
         "branch": task.branch, "worktree": task.worktree, "notes": notes, "summary": task.summary,
     })
 }

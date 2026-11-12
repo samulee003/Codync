@@ -79,8 +79,8 @@ pub(super) fn plan_prompt(task: &Task, split: bool, teammates: &str) -> String {
          work (about 10 minutes or more), or that need different strengths: split it into those parts and coordinate. \
          A subtask is create_task with parentId {id}: self-contained (what to do, where), with acceptance criteria the \
          check marks pass or fail, one bot's work, and handed to the teammate who fits it best with assignee (by class and what is left of their \
-         plan); leave assignee out only if anyone can do it. Order parts that build on others: say in a part's detail \
-         what it waits for. Don't do the subtasks yourself: you will be told when they are all finished; then check \
+         plan); leave assignee out only if anyone can do it. Give a part that builds on others after with their ids \
+         (create_task answers each id): it waits until they are finished, then its assignee starts on it. Don't do the subtasks yourself: you will be told when they are all finished; then check \
          and assemble their results into the task's result and finish_task {id}. Tell the user in a few lines how you \
          sized and planned it.]\n\nTask: {}",
         task.title

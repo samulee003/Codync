@@ -77,6 +77,15 @@ bots: a checker noted an inconsistency and still passed the work. So a task is a
   claimer proposes again). Until it is approved the task can't be finished or split. Reopening a task asks for a plan
   again. The status stays `claimed`, so older apps show it as in progress.
 
+## Tasks in order (`board/order.rs`)
+
+A task can wait for others (`after`, up to 10 task ids, `create_task {after}` / `createTask {after}`): it can't be
+claimed, and nudges leave it out, until each is finished (done, cancelled, or finished with no branch left to merge, so
+a part builds on merged work). A task given to a teammate in advance (`create_task {assignee, after}`) keeps it as
+`assignee` and the dispatch loop hands it over (`assign`) the moment nothing it waits for is left. A task waits only
+for tasks that already exist, so the order never loops. A trial with five dependent parts deadlocked before parts could
+be handed out; with `after`, the lead lays the order out once and the parts start themselves.
+
 ## A fresh session per job (`board/focus.rs`)
 
 Before a bot is handed board work from a job it wasn't on (planning, an assignment or a check; a job is a task with
@@ -132,14 +141,15 @@ task removes its worktree and keeps its branch, so no commit is lost. `GIT_*` va
 
 On every bot's `team` MCP server, next to `list_bots` and `message_bot`: `list_tasks` (`status`, `mine`), `read_task`,
 `create_task` (project defaults to the bot's folder; `parentId` for a subtask; `assignee` hands it to a teammate;
-`acceptance`), `claim_task` (answers `workIn` with the worktree and `workOrder` with the criteria and whether to propose a
+`acceptance`; `after` lists the tasks it waits for), `claim_task` (answers `workIn` with the worktree and `workOrder` with the criteria and whether to propose a
 plan first), `propose_plan` (`plan`, `acceptance`), `note_task`, `finish_task` (`summary` required), `release_task`
 (`reason` becomes a note) and `review_task` (`checks` per criterion, or `approve`; `feedback`). `read_task` includes
-`checkedBy`, `parentId`, the `subtasks` with their summaries, `acceptance`, `approval`, `plan` and `checks`.
+`checkedBy`, `parentId`, the `subtasks` with their summaries, `acceptance`, `approval`, `plan`, `checks`, `waitsFor` and
+`assignee`; `list_tasks` marks a task still `waiting`.
 
 ## App methods and sync
 
-`tasks`, `createTask {title, detail?, project?, acceptance?, approvePlan?}` (the lead plans it), `approvePlan {taskId}`,
+`tasks`, `createTask {title, detail?, project?, acceptance?, approvePlan?, after?}` (the lead plans it), `approvePlan {taskId}`,
 `revisePlan {taskId, note}`, `editTask {taskId, title?, detail?}`, `noteTask {taskId, text}`,
 `assignTask {taskId, botId}` (claims the task for the bot and starts a turn in its own chat), `setTaskStatus {taskId,
 status: open|done|cancelled}`, `mergeTask {taskId}`, `deleteTask {taskId}`. Tasks are kept in kv `board.task.<id>`,

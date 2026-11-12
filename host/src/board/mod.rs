@@ -23,6 +23,7 @@ pub mod flow;
 mod focus;
 pub mod git;
 mod manage;
+pub mod order;
 pub mod sheet;
 pub mod tools;
 
@@ -131,6 +132,12 @@ pub struct Task {
     /// The latest check, criterion by criterion.
     #[serde(default)]
     pub checks: Vec<brief::Check>,
+    /// The tasks it waits for: it can be claimed once they are finished (`order`).
+    #[serde(default)]
+    pub after: Vec<String>,
+    /// The bot it goes to once nothing it waits for is left.
+    #[serde(default)]
+    pub assignee: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     #[serde(default)]
@@ -234,6 +241,8 @@ pub struct NewTask<'a> {
     pub acceptance: Vec<String>,
     /// The claimer proposes a plan the user approves before any work.
     pub approve_plan: bool,
+    /// The tasks it waits for (ids, checked by `order::after`).
+    pub after: Vec<String>,
 }
 
 /// A task's subtasks, oldest first.
@@ -280,6 +289,8 @@ pub fn create(hub: &Hub, by: Actor<'_>, new: &NewTask<'_>) -> Result<Task> {
         plan: None,
         approval: brief::Approval::asked(new.approve_plan),
         checks: vec![],
+        after: new.after.clone(),
+        assignee: None,
         created_at: now,
         updated_at: now,
         rev: 0,
@@ -325,7 +336,7 @@ fn take(hub: &Hub, id: &str, bot: &str) -> Result<Task> {
     change(hub, id, |task| {
         match (&task.claimed_by, task.status) {
             (Some(by), TaskStatus::Claimed) if by == bot => return Ok(()),
-            (_, TaskStatus::Open) => {}
+            (_, TaskStatus::Open) => order::ensure_ready(&hub.store, task)?,
             (Some(by), TaskStatus::Claimed) => bail!("{} already claimed this task", hub.bot_name(by)),
             (_, status) => bail!("this task is {}: only an open task can be claimed", wire(status)),
         }
@@ -335,6 +346,7 @@ fn take(hub: &Hub, id: &str, bot: &str) -> Result<Task> {
         ensure!(held < MAX_CLAIMS, "you already hold {MAX_CLAIMS} tasks: finish or release one first");
         task.status = TaskStatus::Claimed;
         task.claimed_by = Some(bot.to_owned());
+        task.assignee = None;
         Ok(())
     })
 }

@@ -27,7 +27,7 @@ fn new_task(hub: &Hub, title: &str, project: Option<&str>) -> Task {
     create(
         hub,
         Actor::User,
-        &NewTask { title, detail: "", project, parent: None, acceptance: vec![], approve_plan: false },
+        &NewTask { title, detail: "", project, parent: None, acceptance: vec![], approve_plan: false, after: vec![] },
     )
     .unwrap()
 }
@@ -297,6 +297,7 @@ async fn a_coordinator_finishes_only_after_its_subtasks() {
         parent: Some(&closed.id),
         acceptance: vec![],
         approve_plan: false,
+        after: vec![],
     };
     assert!(create(&hub, Actor::User, &orphan).unwrap_err().to_string().contains("parent task is done"));
 }
@@ -428,6 +429,7 @@ async fn the_user_approves_the_plan_before_any_work() {
         parent: None,
         acceptance: vec![],
         approve_plan: true,
+        after: vec![],
     };
     let task = create(&hub, Actor::User, &new).unwrap();
     assert_eq!(task.approval, brief::Approval::Waiting);
@@ -478,6 +480,7 @@ async fn a_check_marks_every_criterion_and_one_failure_sends_it_back() {
         parent: None,
         acceptance: vec!["Adds up to 180 minutes".into(), "Cantonese throughout".into()],
         approve_plan: false,
+        after: vec![],
     };
     let task = create(&hub, Actor::User, &new).unwrap();
     claim(&hub, &task.id, "ada").await.unwrap();
@@ -519,6 +522,7 @@ async fn a_new_job_starts_a_bot_afresh_but_parts_of_one_goal_keep_its_session() 
             parent: Some(&goal.id),
             acceptance: vec![],
             approve_plan: false,
+            after: vec![],
         };
         create(&hub, Actor::User, &new).unwrap()
     };
@@ -532,4 +536,50 @@ async fn a_new_job_starts_a_bot_afresh_but_parts_of_one_goal_keep_its_session() 
     assert!(focus::switch(&hub, "bo", &guide), "each bot has its own");
     focus::note(&hub, "ada", &slides);
     assert!(!focus::switch(&hub, "ada", &goal), "claiming a part moved it back to the goal");
+}
+
+#[tokio::test]
+async fn a_part_waits_for_the_parts_it_builds_on_then_starts_on_its_own() {
+    let hub = hub();
+    let goal = new_task(&hub, "Build the library", None);
+    let part = |title: &str, after: Vec<String>| {
+        let new = NewTask {
+            title,
+            detail: "",
+            project: None,
+            parent: Some(&goal.id),
+            acceptance: vec![],
+            approve_plan: false,
+            after,
+        };
+        create(&hub, Actor::Bot("ada"), &new).unwrap()
+    };
+    let base = part("Text helpers", vec![]);
+    let api = part("Public API", vec![base.id.clone()]);
+    assert!(order::after(&hub.store, &json!(["nope"])).is_err(), "an unknown task");
+    assert_eq!(order::after(&hub.store, &json!([base.id, base.id])).unwrap(), vec![base.id.clone()]);
+
+    // Waiting: not claimable, and not offered.
+    let early = claim(&hub, &api.id, "bo").await.unwrap_err().to_string();
+    assert!(early.contains("waits for \"Text helpers\""), "{early}");
+    assert_eq!(order::waiting_on(&hub.store, &api).len(), 1);
+    change(&hub, &api.id, |t| {
+        t.assignee = Some("bo".into());
+        Ok(())
+    })
+    .unwrap();
+    assert!(order::release_ready(&hub).await.is_empty(), "still waiting");
+
+    // The part it builds on is done: the waiting part goes to its assignee.
+    claim(&hub, &base.id, "ada").await.unwrap();
+    finish(&hub, &base.id, "ada", "Wrote them").await.unwrap();
+    review(&hub, &base.id, "bo", true, "").unwrap();
+    assert_eq!(get(&hub.store, &base.id).unwrap().status, TaskStatus::Done);
+    // No actor runs in tests: the hand-off claims it for the assignee, then telling the bot fails.
+    order::release_ready(&hub).await;
+    let started = get(&hub.store, &api.id).unwrap();
+    assert_eq!(
+        (started.status, started.claimed_by.as_deref(), started.assignee),
+        (TaskStatus::Claimed, Some("bo"), None)
+    );
 }

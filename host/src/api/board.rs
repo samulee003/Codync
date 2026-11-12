@@ -38,6 +38,7 @@ pub(super) async fn call(hub: &Arc<Hub>, method: &str, b: Value) -> Result<Contr
                 acceptance: board::brief::criteria(&b["acceptance"])?,
                 // The user approves the plan before any work unless they turn it off.
                 approve_plan: b["approvePlan"].as_bool().unwrap_or(true),
+                after: board::order::after(&hub.store, &b["after"])?,
             };
             let task = board::create(hub, Actor::User, &new)?;
             // The lead plans it: splits it into subtasks, takes it, or leaves it for a better-fitting bot. With no bot

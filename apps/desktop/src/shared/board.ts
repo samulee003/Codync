@@ -45,6 +45,10 @@ export interface BoardTask {
   approval?: PlanApproval
   /** The latest check, criterion by criterion. */
   checks?: CriterionCheck[]
+  /** The tasks it waits for: it starts once they are finished. */
+  after?: string[]
+  /** The bot it goes to once nothing it waits for is left. */
+  assignee?: string | null
   createdAt: number
   updatedAt: number
   rev: number
@@ -106,14 +110,28 @@ export function taskActions(task: Pick<BoardTask, 'status' | 'branch'>): TaskAct
   }
 }
 
+/** Whether a task another waits for is out of the way: done, cancelled, or finished with no branch left to merge. */
+export function finishedForOthers(task: Pick<BoardTask, 'status' | 'branch'>): boolean {
+  return task.status === 'done' || task.status === 'cancelled' || (task.status === 'review' && !task.branch)
+}
+
+/** The titles of the tasks an open task still waits for. */
+export function waitingFor(task: Pick<BoardTask, 'status' | 'after'>, find: (id: string) => BoardTask | undefined): string[] {
+  if (task.status !== 'open') return []
+  return (task.after ?? []).map(find).filter((t): t is BoardTask => !!t && !t.deleted && !finishedForOthers(t)).map((t) => t.title)
+}
+
 /** A task's byline: who holds it, who checks it, the task it is part of, its branch and how many notes it has. */
 export function taskByline(
   task: BoardTask,
-  look: { name: (bot: string) => string; parentTitle: (id: string) => string | undefined; tr: (key: string) => string },
+  look: { name: (bot: string) => string; find: (id: string) => BoardTask | undefined; tr: (key: string) => string },
 ): string {
-  const { name, parentTitle, tr } = look
-  const parent = task.parent ? parentTitle(task.parent) : undefined
+  const { name, find, tr } = look
+  const parent = task.parent ? find(task.parent)?.title : undefined
+  const waiting = waitingFor(task, find)
   return [
+    waiting.length ? tr('Waits for {titles}').replace('{titles}', waiting.join(', ')) : null,
+    task.status === 'open' && task.assignee ? tr('For {name}').replace('{name}', name(task.assignee)) : null,
     task.claimedBy ? name(task.claimedBy) : null,
     awaitsApproval(task) ? tr('Plan waits for you') : null,
     task.status === 'checking' && task.reviewer ? tr('Checked by {name}').replace('{name}', name(task.reviewer)) : null,

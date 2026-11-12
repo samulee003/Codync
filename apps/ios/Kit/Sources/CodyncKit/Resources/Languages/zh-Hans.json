@@ -1992,5 +1992,7 @@
   "Approve plan": "批准计划",
   "What to do: the result, the materials to use, and what not to do": "要做什么：成品、要用的材料、不可以做的事",
   "Acceptance criteria, one per line: what must hold for it to count as done": "验收标准，每行一项：要符合什么才算完成",
-  "Approve the plan before work starts": "开工前先批准计划"
+  "Approve the plan before work starts": "开工前先批准计划",
+  "Waits for {titles}": "等待：{titles}",
+  "For {name}": "交给 {name}"
 }

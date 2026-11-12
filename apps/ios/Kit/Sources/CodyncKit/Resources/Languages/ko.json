@@ -1992,5 +1992,7 @@
   "Approve plan": "계획 승인",
   "What to do: the result, the materials to use, and what not to do": "할 일: 결과물, 사용할 자료, 하지 말아야 할 것",
   "Acceptance criteria, one per line: what must hold for it to count as done": "수락 기준, 한 줄에 하나: 완료로 볼 조건",
-  "Approve the plan before work starts": "작업 전에 계획 승인"
+  "Approve the plan before work starts": "작업 전에 계획 승인",
+  "Waits for {titles}": "{titles} 대기 중",
+  "For {name}": "{name} 담당"
 }

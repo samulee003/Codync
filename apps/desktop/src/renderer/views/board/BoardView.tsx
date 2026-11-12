@@ -93,7 +93,7 @@ function TaskRow({ task, run }: { task: BoardTask; run: (work: Promise<unknown>)
   const [note, setNote] = useState('')
   const byline = taskByline(task, {
     name: (bot) => store.bots.get(bot)?.name ?? bot,
-    parentTitle: (id) => store.board.byId.get(id)?.title,
+    find: (id) => store.board.byId.get(id),
     tr,
   })
   const addNote = () => {

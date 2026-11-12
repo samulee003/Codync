@@ -1992,5 +1992,7 @@
   "Approve plan": "Aprobar plan",
   "What to do: the result, the materials to use, and what not to do": "Qué hacer: el resultado, los materiales a usar y lo que no se debe hacer",
   "Acceptance criteria, one per line: what must hold for it to count as done": "Criterios de aceptación, uno por línea: lo que debe cumplirse para darlo por hecho",
-  "Approve the plan before work starts": "Aprobar el plan antes de empezar"
+  "Approve the plan before work starts": "Aprobar el plan antes de empezar",
+  "Waits for {titles}": "Espera a {titles}",
+  "For {name}": "Para {name}"
 }
