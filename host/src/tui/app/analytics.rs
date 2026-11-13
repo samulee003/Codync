@@ -60,6 +60,7 @@ impl App {
             Overlay::Library(_) => Some(Screen::Library),
             Overlay::Board(_) => Some(Screen::Board),
             Overlay::Routines(_) => Some(Screen::Routines),
+            Overlay::Computer(_) => Some(Screen::BotComputer),
             Overlay::Market(_) => Some(Screen::Marketplace),
             Overlay::Help(_) => Some(Screen::Help),
             Overlay::Form(_) => Some(Screen::BotDetails),
@@ -107,6 +108,10 @@ mod tests {
         app.overlays.push(Overlay::Analytics(crate::tui::manage::AnalyticsSheet::default()));
         app.report_screen();
         assert_eq!(app.seen.screen, Some(Screen::Usage), "a sheet over it isn't a screen");
+        app.overlays.push(Overlay::Computer("b".into()));
+        app.report_screen();
+        assert_eq!(app.seen.screen, Some(Screen::BotComputer));
+        app.overlays.pop();
 
         app.overlays.clear();
         app.trace = TraceMode::Full;

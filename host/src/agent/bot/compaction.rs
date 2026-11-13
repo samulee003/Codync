@@ -79,10 +79,10 @@ impl Actor {
         if let Some(life) = self.hub.store.kv_get(&self.cache_life_key()).and_then(|v| serde_json::from_str(&v).ok()) {
             return life;
         }
-        let api_key = crate::agent::auth::env(&self.hub.store, &self.cfg.backend)
+        let api_key = crate::agent::auth::saved_env(&self.hub.store, &self.cfg.backend)
             .unwrap_or_default()
             .iter()
-            .any(|(k, _)| k == "ANTHROPIC_API_KEY")
+            .any(|k| k == "ANTHROPIC_API_KEY")
             || std::env::var_os("ANTHROPIC_API_KEY").is_some();
         if self.adapter() == Adapter::Claude && !api_key { CacheLife::OneHour } else { CacheLife::FiveMinutes }
     }
@@ -231,6 +231,7 @@ impl Actor {
         if let Some(&(used, size)) = self.conn.as_ref().and_then(|conn| conn.usage.get(&sid)) {
             c.usage(used, size);
             self.note_window(size);
+            self.note_agent_window(size);
         }
         // The compaction turn itself is no turn of the conversation: it neither counts nor resets the idle clock.
         if compacting.is_some() {

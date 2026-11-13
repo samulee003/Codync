@@ -93,7 +93,7 @@ private class ComputerRoster(private val context: Context, val key: String) {
 @Composable internal fun BotListView(app: AccountContext, states: List<AppState>, accounts: AccountStore, account: () -> Unit, manage: () -> Unit,
     newBot: (String) -> Unit, newGroup: (String) -> Unit, edit: (String, Bot) -> Unit, extensions: (String) -> Unit, bottomInset: Dp) {
     var confirmDelete by remember { mutableStateOf<Pair<String, Bot>?>(null) }
-    var naming by remember { mutableStateOf<SectionNaming?>(null) }
+    var naming by remember { mutableStateOf<Naming?>(null) }
     /** The computer whose team board is open. */
     var board by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
@@ -180,9 +180,9 @@ private class ComputerRoster(private val context: Context, val key: String) {
                 }
                 if (grouped && (movingComputer || id in collapsed)) continue
                 botLines(state, store, roster, folded, grouped, agentLogos, RosterActions(toggleSection,
-                    rename = { name -> naming = SectionNaming("Rename section", name) { renameSection(roster, store, name, it) } },
+                    rename = { name -> naming = Naming("Rename section", name) { renameSection(roster, store, name, it) } },
                     remove = { name -> renameSection(roster, store, name, null) },
-                    newSection = { bot -> naming = SectionNaming("New section", "") { store.setSection(bot.id, it) } },
+                    newSection = { bot -> naming = Naming("New section", "") { store.setSection(bot.id, it) } },
                     edit = { bot -> edit(id, bot) }, delete = { bot -> confirmDelete = id to bot }))
             }
         }
@@ -195,7 +195,7 @@ private class ComputerRoster(private val context: Context, val key: String) {
             confirmDelete?.let { (id, bot) -> accounts.store(id)?.deleteBot(bot) {} }
         })
     }
-    SectionNameDialog(naming) { naming = null }
+    NameDialog(naming, "Section name", { naming = null }, ::limitSectionName, ::sectionName)
     CodyncSheet(board, { board = null }) { id ->
         val state = states.firstOrNull { it.computer.id == id }
         val store = accounts.store(id)

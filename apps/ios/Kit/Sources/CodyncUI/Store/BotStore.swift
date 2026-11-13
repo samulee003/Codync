@@ -63,6 +63,8 @@ public final class BotStore {
     public internal(set) var hostVersion: HostVersion?
     /// An update this phone asked of the computer; cleared when its version changes.
     public internal(set) var hostUpdate: HostUpdate?
+    /// Who runs it when it's a Codync Cloud computer, as the account lists it; nil for the user's own.
+    public internal(set) var cloudHosting: CloudHosting?
     public internal(set) var bots: [String: Bot] = [:]
     public internal(set) var entries: [String: [Entry]] = [:]
     public internal(set) var usage: Usage
@@ -141,6 +143,8 @@ public final class BotStore {
     @ObservationIgnored var callEnds = 0
     var saveTask: Task<Void, Never>?
     var rewound = false
+    /// While everything is fetched again (`refetchAll`): the entries the computer has sent since it began.
+    var refetched: Set<String>?
     /// Events stayed undecodable after the rewind.
     var unreadable = false
     /// This app's marketing version, compared with the host's `minApp`.
@@ -211,6 +215,7 @@ public final class BotStore {
     /// (docs/reference/compatibility.md). `nil` until the host has answered, and whenever
     /// a version can't be read: an unknown is never a reason to lock someone out.
     public var mismatch: VersionMismatch? {
+        if let reason = AppFloor.shared.reason { return .appFloor(reason: reason) }
         guard let hostVersion else { return nil }
         if let found = VersionMismatch.check(app: appVersion, hostVersion: hostVersion.version, minApp: hostVersion.minApp) {
             return found
@@ -223,7 +228,18 @@ public final class BotStore {
         return nil
     }
 
-    /// Roster order: the lead, pinned bots, then where the user dragged them, then most recent activity.
+    /// A Codync Cloud computer older than this app's `minHost`: the cloud updates it on its own (this app's
+    /// `Codync-App` header asks for it), so it reads as updating, not as something for the user to do.
+    public var isCloudUpdating: Bool {
+        if case .updateHost = mismatch { cloudHosting != nil } else { false }
+    }
+
+    /// A Codync Cloud computer that's asleep: a connection or a message wakes it, so it isn't offline.
+    public var isAsleep: Bool {
+        if case .computerOffline = connection { cloudHosting?.state.isAsleep == true } else { false }
+    }
+
+        /// Roster order: the lead, pinned bots, then where the user dragged them, then most recent activity.
     public var roster: [Bot] {
         bots.values.filter { !$0.hidden }.sorted {
             if $0.band != $1.band { return $0.band < $1.band }
@@ -283,8 +299,9 @@ public final class BotStore {
     /// against a late response.
     public func chat(_ botId: String) -> [Entry] { (entries[botId] ?? []).filter { $0.data.removed != true } }
 
+    /// Not while everything is fetched again (`refetchAll`): a page would sit below entries about to go.
     public func canLoadOlder(_ botId: String) -> Bool {
-        !historyComplete.contains(botId) && chat(botId).contains { $0.seq > 0 && $0.seq != Int64.max }
+        refetched == nil && !historyComplete.contains(botId) && chat(botId).contains { $0.seq > 0 && $0.seq != Int64.max }
     }
 
     /// A group's bots that still exist.

@@ -64,7 +64,7 @@ impl Screen {
     /// bots may work at once; otherwise one bot at a time. A phone takeover blocks both.
     fn claim(&self, bot: &str, read_only: bool, shared: bool) -> Result<bool> {
         let mut c = self.control.locked();
-        if c.user && !read_only {
+        if c.user.is_some() && !read_only {
             bail!(
                 "The user has taken over the screen from their phone. Wait until they hand it back, or ask them what to do."
             );
@@ -246,7 +246,7 @@ mod tests {
         assert!(s.claim("a", false, false).unwrap());
         assert!(!s.claim("a", false, false).unwrap());
         assert!(s.claim("b", true, false).is_err(), "one bot at a time");
-        s.takeover(true);
+        s.takeover("phone", true);
         assert!(s.claim("a", false, false).is_err());
         assert!(s.claim("a", true, false).is_ok());
     }
@@ -259,7 +259,7 @@ mod tests {
         assert!(s.claim("b", false, true).unwrap(), "a second bot is news too");
         assert_eq!(s.control.locked().active_agents(), ["a", "b"]);
         assert!(!s.claim("a", false, true).unwrap());
-        s.takeover(true);
+        s.takeover("phone", true);
         assert!(s.claim("a", false, true).is_err(), "a phone takeover still stops every bot");
         assert!(s.claim("b", true, true).is_ok(), "but they may look");
     }

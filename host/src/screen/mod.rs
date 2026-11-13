@@ -73,8 +73,8 @@ const KV_ENABLED: &str = "screen_enabled";
 
 #[derive(Default)]
 struct Control {
-    /// The phone took over: bots may only look.
-    user: bool,
+    /// The device that took over (its key): bots may only look while it has a screen session.
+    user: Option<String>,
     /// The bots using the computer, and when each last did.
     agents: HashMap<String, Instant>,
 }
@@ -111,12 +111,35 @@ struct Viewer {
     owner: String,
     ice: IceConfig,
     state: ViewerState,
+    /// When `screenPrepare` reserved it (ms).
+    opened_at: i64,
     pending_until: i64,
     link_id: u64,
     signaling: Option<signaling::Signaling>,
 }
 
+/// A finished session, kept until its watcher reports it (`remote_screen_finished`).
+pub struct EndedViewer {
+    /// How far it got: `abandoned` (reserved, never offered), `not_connected` (answered, the picture never
+    /// connected), `connected`, or `failed` (the helper couldn't answer the offer).
+    pub outcome: &'static str,
+    /// Through TURN servers the cloud handed out.
+    pub relay: bool,
+    pub seconds: i64,
+}
+
 impl Viewer {
+    fn ended(&self, now: i64) -> EndedViewer {
+        let outcome = match self.state {
+            ViewerState::Prepared => "abandoned",
+            ViewerState::Started => "not_connected",
+            #[cfg(any(unix, test))]
+            ViewerState::Connected => "connected",
+            ViewerState::Failed => "failed",
+        };
+        EndedViewer { outcome, relay: !self.ice.ice_servers.is_empty(), seconds: (now - self.opened_at).max(0) / 1000 }
+    }
+
     fn started(&self) -> bool {
         !matches!(self.state, ViewerState::Prepared | ViewerState::Failed)
     }
@@ -141,6 +164,8 @@ pub struct Screen {
     status: Mutex<HelperStatus>,
     control: Mutex<Control>,
     sessions: Mutex<HashMap<String, Viewer>>,
+    /// Sessions that ended, until `watch_viewer` reports them.
+    ended: Mutex<HashMap<String, EndedViewer>>,
     driver: cua::Driver,
     /// The user's choice of driver for the bots' computer tools (`driver_choice`).
     driver_choice: Mutex<ComputerDriver>,
@@ -160,6 +185,7 @@ impl Screen {
             status: Mutex::default(),
             control: Mutex::default(),
             sessions: Mutex::default(),
+            ended: Mutex::default(),
             driver: cua::Driver::default(),
             driver_choice: Mutex::default(),
             next_link: AtomicU64::new(1),
@@ -196,7 +222,7 @@ impl Screen {
             "capture": st.capture,
             "input": st.input,
             "displays": st.displays,
-            "userControl": c.user,
+            "userControl": c.user.is_some(),
             "agentBot": c.active_agent(),
             "agentBots": c.active_agents(),
             "computerUse": self.computer_use(),
