@@ -307,6 +307,12 @@ fn tell(hub: &Hub, task: &Task, text: String) {
 /// waits for the user, to propose it first.
 pub fn work_order(task: &Task) -> String {
     let mut out = String::new();
+    // A real run put the result in the bot's own folder, not the task's: say where it goes.
+    if task.worktree.is_none()
+        && let Some(project) = &task.project
+    {
+        let _ = write!(out, "\n\nWork in {project}: put the result there.");
+    }
     if !task.acceptance.is_empty() {
         let _ =
             write!(out, "\n\nAcceptance criteria (the check marks each pass or fail):{}", numbered(&task.acceptance));
@@ -318,7 +324,8 @@ pub fn work_order(task: &Task) -> String {
                     out,
                     "\n\nIf what to make, for whom, with which tools or materials, or what counts as done is unclear, \
                      first ask_user {} up to 3 short questions (only ones whose answer changes the work) and stop; if \
-                     it is clear, go straight to propose_plan.",
+                     it is clear, go straight to propose_plan. Write questions, the plan and criteria in the language \
+                     the task is written in.",
                     task.id
                 );
             }
