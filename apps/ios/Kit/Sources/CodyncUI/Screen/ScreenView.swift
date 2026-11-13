@@ -9,6 +9,8 @@ public struct ScreenView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    /// The bot being watched, when opened from its chat.
+    private let watching: String?
     /// Animated close from the presenting layer (`.codyncOverlay`'s `close`); falls back to `dismiss`.
     private let close: (() -> Void)?
 
@@ -29,6 +31,7 @@ public struct ScreenView: View {
 
     /// `watching`: the bot being watched, when opened from its chat.
     public init(watching: String? = nil, close: (() -> Void)? = nil) {
+        self.watching = watching
         self.close = close
         _wanted = State(initialValue: watching == nil)
     }
