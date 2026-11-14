@@ -73,6 +73,9 @@ jobs:
 
       - name: Build and Package DMG
         working-directory: apps/desktop
+        env:
+          # The bundled host looks for its own updates in this fork's releases, not the upstream's.
+          CODYNC_RELEASES_BASE: https://github.com/${{ github.repository }}/releases
         run: |
           npm ci
           npm run icons

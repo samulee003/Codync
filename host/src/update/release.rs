@@ -6,7 +6,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fmt::Write as _, io::Read, path::Path, sync::LazyLock, time::Duration};
 
-const GITHUB_RELEASES: &str = "https://github.com/leepokai/Codync/releases";
+/// A fork's CI builds set `CODYNC_RELEASES_BASE` (its own releases), so its hosts never fetch the upstream's: the
+/// fork's releases carry no manifest signed with the upstream key, and the lookup fails instead of installing it.
+const GITHUB_RELEASES: &str = match option_env!("CODYNC_RELEASES_BASE") {
+    Some(base) => base,
+    None => "https://github.com/leepokai/Codync/releases",
+};
 pub const MAX_ARCHIVE: usize = 128 * 1024 * 1024;
 const MAX_UNPACKED: u64 = 256 * 1024 * 1024;
 const PUBLIC_KEY: &str = include_str!("../../../packaging/updates/host-public-key.txt");
