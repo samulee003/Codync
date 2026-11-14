@@ -12,17 +12,21 @@ import {
   type Usage,
 } from '@shared/models'
 import type { Artifact, ArtifactChunk, LibraryItem } from '@shared/artifacts'
+import type { BoardTask, TaskStatus, TaskTemplate } from '@shared/board'
+import type { BotClass, BotSheet } from '@shared/sheet'
 import { parseCallCue, type CallCue } from '@shared/calls'
 import type { NetworkView } from '@shared/network'
 import { trNow } from '../lib/l10n.ts'
 
-/** How a client reaches a host API. Only loopback today: the computer's own host or an SSH tunnel. */
+/** How a client reaches a host API: loopback (the computer's own host or an SSH tunnel) or the relay (a cloud computer). */
 export type HostRoute = 'loopback' | 'direct' | 'relay'
 
 export class HostError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The computer isn't connected to the relay: a cloud computer asleep (the connection wakes it), or one that's off. */
+    readonly offline = false,
   ) {
     super(message)
   }
@@ -38,12 +42,16 @@ export class HostError extends Error {
 }
 
 export interface HostTransport {
+  /** How it reaches the host, shown in the thread header. */
+  readonly route?: HostRoute
   call(method: string, body: unknown, timeoutMs: number): Promise<unknown>
   /** Each element is one event's JSON (what SSE puts after `data:`). */
   stream(path: string, onData: (line: string) => void, onEnd: (error: HostError | null) => void): () => void
 }
 
 export class LoopbackTransport implements HostTransport {
+  readonly route = 'loopback'
+
   constructor(
     readonly baseURL: string,
     private token: string,
@@ -65,25 +73,57 @@ export class LoopbackTransport implements HostTransport {
   }
 }
 
+/** An account computer through the relay's encrypted channel, which the main process keeps (`main/channel`). */
+export class ChannelTransport implements HostTransport {
+  readonly route = 'relay'
+
+  constructor(
+    readonly computerId: string,
+    private signKey: string,
+  ) {}
+
+  async call(method: string, body: unknown, timeoutMs: number) {
+    try {
+      return await window.codync.channel.call(this.computerId, this.signKey, method, body, timeoutMs)
+    } catch (e) {
+      throw channelError(e as CallError)
+    }
+  }
+
+  stream(path: string, onData: (line: string) => void, onEnd: (error: HostError | null) => void) {
+    return window.codync.channel.stream(this.computerId, this.signKey, path, onData, (error) => onEnd(error ? channelError(error) : null))
+  }
+}
+
+const channelError = (e: CallError) => new HostError(e.status ?? 0, e.message, e.offline === true)
+
 export type HostEvent =
   | { type: 'icons'; iconsRevision: number; icons: import('@shared/custom-icons').CustomIcons }
-  /** `network` is null from hosts before the network view. */
-  | { type: 'hello'; hostId: string; rev: number; usage: Usage; screen: ScreenState | null; network: NetworkView | null; icons?: import('@shared/custom-icons').CustomIcons }
+  /** `network` is null from hosts before the network view. `catchUp` events follow before the live ones (null from hosts before 2.32.0). */
+  | { type: 'hello'; hostId: string; rev: number; usage: Usage; screen: ScreenState | null; network: NetworkView | null; icons?: import('@shared/custom-icons').CustomIcons; catchUp: number | null }
   | { type: 'bot'; bot: Bot }
   | { type: 'botDeleted'; id: string; rev: number }
   | { type: 'entry'; entry: Entry }
   | { type: 'usage'; usage: Usage }
   /** An artifact was published, updated or renamed (the catch-up replays it too). */
   | { type: 'artifact'; artifact: Artifact }
+  /** A team board task was added, changed or deleted (`deleted`; the catch-up replays it too). */
+  | { type: 'task'; task: BoardTask }
   | { type: 'screen'; screen: ScreenState }
   | { type: 'accessRequests'; requests: AccessRequest[] }
   | { type: 'pairingRequests'; requests: PairingRequest[] }
   | { type: 'cloud'; cloud: CloudStatus }
+  /** The computer took a new name (a cloud computer renamed from any device): its `hello` says it from now on. */
+  | { type: 'name'; name: string }
+  /** The computer's automatic bot order was switched (from any device): its `hello` says it from now on. */
+  | { type: 'autoOrder'; enabled: boolean }
   /** This computer's network changed (members, roles, presence, offered bots) or cloud assistants were switched. */
   | { type: 'network'; network: NetworkView }
   /** For the voice of a call in this app (only the computer's own apps receive this computer's calls' cues). */
   | { type: 'call'; cue: CallCue }
   | { type: 'resync' }
+  /** One this app has no use for. */
+  | { type: 'skipped' }
   /** An event this app version couldn't read (host newer/older than the app). */
   | { type: 'undecodable'; kind: string }
 
@@ -107,6 +147,7 @@ export function parseEvent(line: string): HostEvent | null {
         screen: normalizeScreen(raw.screen as ScreenState | undefined),
         network: (raw.network as NetworkView | undefined) ?? null,
         icons: raw.icons as import('@shared/custom-icons').CustomIcons | undefined,
+        catchUp: typeof raw.catchUp === 'number' ? raw.catchUp : null,
       }
     case 'bot': {
       const bot = raw.bot as (Bot & { deleted?: boolean }) | undefined
@@ -125,6 +166,10 @@ export function parseEvent(line: string): HostEvent | null {
       const artifact = raw.artifact as Artifact | undefined
       return artifact && typeof artifact.id === 'string' && typeof artifact.botId === 'string' ? { type, artifact } : null
     }
+    case 'task': {
+      const task = raw.task as BoardTask | undefined
+      return task && typeof task.id === 'string' && typeof task.rev === 'number' ? { type, task: { ...task, notes: task.notes ?? [] } } : null
+    }
     case 'screen': {
       const screen = normalizeScreen(raw.screen as ScreenState | undefined)
       return screen ? { type, screen } : null
@@ -135,6 +180,10 @@ export function parseEvent(line: string): HostEvent | null {
       return { type, requests: (raw.requests as PairingRequest[]) ?? [] }
     case 'cloud':
       return raw.cloud ? { type, cloud: raw.cloud as CloudStatus } : null
+    case 'name':
+      return typeof raw.name === 'string' ? { type, name: raw.name } : null
+    case 'autoOrder':
+      return typeof raw.enabled === 'boolean' ? { type, enabled: raw.enabled } : null
     case 'network':
       return raw.network ? { type, network: raw.network as NetworkView } : null
     case 'call': {
@@ -166,6 +215,79 @@ export class HostClient {
     return this.call('renameArtifact', { botId, artifactId, title })
   }
 
+  /** The board, with the bots turned off from claiming (`optedOut`; hosts before it leave it out). */
+  tasks(): Promise<{ tasks: BoardTask[]; optedOut?: string[] }> {
+    return this.call('tasks')
+  }
+
+  setBoardClaims(botId: string, on: boolean): Promise<{ optedOut: string[] }> {
+    return this.call('setBoardClaims', { botId, on })
+  }
+
+  /** Every bot's character sheet: class, level and abilities. */
+  botSheets(): Promise<{ sheets: BotSheet[] }> {
+    return this.call('botSheets')
+  }
+
+  setBotClass(botId: string, botClass: BotClass | null): Promise<{ sheet: BotSheet }> {
+    return this.call('setBotClass', { botId, class: botClass })
+  }
+
+  /** Hands the goal to the lead bot, which splits it into tasks; answers who got it. */
+  splitGoal(goal: string): Promise<{ botId: string; name: string }> {
+    return this.call('splitGoal', { goal })
+  }
+
+  createTask(title: string, detail: string, project: string | null, acceptance: string[], approvePlan: boolean): Promise<{ task: BoardTask }> {
+    return this.call('createTask', { title, detail, acceptance, approvePlan, ...(project ? { project } : {}) })
+  }
+
+  approvePlan(taskId: string): Promise<{ task: BoardTask }> {
+    return this.call('approvePlan', { taskId })
+  }
+
+  revisePlan(taskId: string, note: string): Promise<{ task: BoardTask }> {
+    return this.call('revisePlan', { taskId, note })
+  }
+
+  noteTask(taskId: string, text: string): Promise<{ task: BoardTask }> {
+    return this.call('noteTask', { taskId, text })
+  }
+
+  assignTask(taskId: string, botId: string): Promise<{ task: BoardTask }> {
+    return this.call('assignTask', { taskId, botId })
+  }
+
+  setTaskStatus(taskId: string, status: TaskStatus): Promise<{ task: BoardTask }> {
+    return this.call('setTaskStatus', { taskId, status })
+  }
+
+  /** Merging runs git in the project, which can take a while on a large repository. */
+  mergeTask(taskId: string): Promise<{ task: BoardTask }> {
+    return this.call('mergeTask', { taskId }, 120_000)
+  }
+
+  deleteTask(taskId: string): Promise<{ ok: boolean }> {
+    return this.call('deleteTask', { taskId })
+  }
+
+  answerQuestions(taskId: string, answers: string[]): Promise<{ task: BoardTask }> {
+    return this.call('answerQuestions', { taskId, answers })
+  }
+
+  /** The saved task templates; hosts before them have no such method. */
+  taskTemplates(): Promise<{ templates: TaskTemplate[] }> {
+    return this.call('taskTemplates')
+  }
+
+  saveTaskTemplate(taskId: string, name?: string): Promise<{ template: TaskTemplate }> {
+    return this.call('saveTaskTemplate', { taskId, ...(name ? { name } : {}) })
+  }
+
+  deleteTaskTemplate(templateId: string): Promise<{ ok: boolean }> {
+    return this.call('deleteTaskTemplate', { templateId })
+  }
+
   constructor(readonly transport: HostTransport) {}
 
   call<T>(method: string, body: unknown = {}, timeoutMs = 20_000): Promise<T> {
@@ -176,8 +298,8 @@ export class HostClient {
   events(since: number, client: string, onEvent: (e: HostEvent) => void, onEnd: (error: HostError | null) => void) {
     const query = new URLSearchParams({ since: String(since), client })
     return this.transport.stream(`/events?${query}`, (line) => {
-      const event = parseEvent(line)
-      if (event) onEvent(event)
+      // One this app has no use for still counts toward the catch-up `hello` announced.
+      onEvent(parseEvent(line) ?? { type: 'skipped' })
     }, onEnd)
   }
 

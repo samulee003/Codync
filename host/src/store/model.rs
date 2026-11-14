@@ -146,6 +146,10 @@ pub struct BotConfig {
     /// it got it sends `null` where there is no switch.
     #[serde(default, deserialize_with = "null_as_false")]
     pub harness_memory: bool,
+    /// When Codync summarizes the bot's chat ahead of time (see `agent::bot::compaction`); only for an agent it can
+    /// ask to, and the apps show it only there. `null` and values from a newer app read as the default.
+    #[serde(default)]
+    pub compaction: codync_mem::compaction::Threshold,
     /// Created without a name: the host names it from its first conversations (see `naming`)
     /// until the user renames it.
     #[serde(default)]
@@ -222,6 +226,13 @@ pub struct Entry {
     pub data: Value,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+impl Entry {
+    /// A message the chat shows as one: the user's, or an agent's finished reply.
+    pub fn is_message(&self) -> bool {
+        self.kind == EntryKind::User.as_str() || (self.kind == EntryKind::Agent.as_str() && self.data["final"] == true)
+    }
 }
 
 /// A message's text, or the names of its files when it has none.

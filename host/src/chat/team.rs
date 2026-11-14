@@ -42,8 +42,9 @@ conversation, working directory, tools and permissions, not your context. Coordi
 asking for edits in a shared project. Native subagents are managed by your own harness; these tools are for \
 collaborating with the user's existing bots.";
 
+/// `list_bots` and `message_bot`, then the team board's tools (`board::tools`).
 pub fn tools() -> Value {
-    json!([
+    let mut tools = json!([
         {
             "name": "list_bots",
             "description": "List the Codync bots you can message, with their IDs, kinds, specialties and status: this computer's first, then those on the user's other computers (where Claude Code sessions and Codex threads can be offered too). Narrow it with query (words in a bot's name or description), computer, kind, or online; it returns at most limit at a time, with next for the rest.",
@@ -73,7 +74,11 @@ pub fn tools() -> Value {
             },
             "annotations": {"readOnlyHint": false, "idempotentHint": false},
         }
-    ])
+    ]);
+    if let Some(list) = tools.as_array_mut() {
+        list.extend(crate::board::tools::schemas());
+    }
+    tools
 }
 
 /// Sent through the recipient's normal actor queue, but never merged with user messages or
@@ -358,6 +363,10 @@ pub async fn call_async(hub: &Arc<Hub>, from: &str, name: &str, args: &Value) ->
                 Recipient::There(target) => remote::message(hub, &visible_bot(hub, from)?, &target, message).await,
                 Recipient::Here(_) => call(hub, from, name, args),
             }
+        }
+        _ if crate::board::tools::TOOLS.contains(&name) => {
+            visible_bot(hub, from)?;
+            crate::board::tools::call(hub, from, name, args).await
         }
         _ => call(hub, from, name, args),
     }

@@ -71,6 +71,11 @@ struct GroupTarget: Identifiable {
     let group: Bot
 }
 
+struct BoardTarget: Identifiable {
+    let id = UUID()
+    let computerId: ComputerID
+}
+
 struct EditTarget: Identifiable {
     let id = UUID()
     let computerId: ComputerID

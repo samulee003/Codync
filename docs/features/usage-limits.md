@@ -17,6 +17,16 @@ On the wire, `usage` gains `services: [{id, name, shown, registry?}]` next to `p
 
 `usage` with `refresh: true` answers within a minute with what has landed by then; a slower reader (a first download) carries on and lands through `usage` events. Every change goes through `Hub::update_usage`, under the lock, so a reading landing during a sync isn't written over.
 
+### Stamina in the roster
+
+Every roster (desktop, iPhone, Android, terminal UI) shows a bot's **stamina** under its avatar, like a game character's:
+how much of its agent's plan is left. The host computes it (`usage/stamina.rs`) from every reading, hidden or not: the
+agent's tightest limit (the window with the most used; a note such as a dollar balance never counts), as
+`usage.stamina[<name>] = {left, label, resetsAt?, resetsText?}`, keyed by the agent's harness id and its registry id, so
+an app looks a bot up by its `backend` alone. The bar is green from 50% left, amber from 20%, red below; the desktop's
+tooltip (and the phones' accessibility value) names the limit, what is left and when it resets; the terminal UI shows one
+block whose height drains. Groups and agents with no reading show no bar. Additive: older apps ignore `stamina`.
+
 Adding an agent is one row in `READERS` (`usage/services.rs`). The reader's `id` is the harness id, so a bot's `backend` finds it (`backends::harness_of`, which also answers to the registry id).
 
 ## Readers

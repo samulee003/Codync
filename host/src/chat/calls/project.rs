@@ -58,7 +58,7 @@ pub async fn now(cwd: &str) -> String {
 }
 
 /// git, where running it can't open macOS's "install the command line tools" prompt.
-async fn git_program() -> Option<PathBuf> {
+pub(crate) async fn git_program() -> Option<PathBuf> {
     let git = crate::agent::backends::which("git")?;
     if cfg!(target_os = "macos") && git == Path::new("/usr/bin/git") {
         let tools = tokio::process::Command::new("/usr/bin/xcode-select").arg("-p").output().await.ok()?;

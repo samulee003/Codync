@@ -1,5 +1,5 @@
 use super::*;
-use crate::store::{Device, DeviceSource, Store};
+use crate::store::{Device, DeviceAccount, DeviceSource, Store};
 use serde_json::json;
 
 fn temp_hub() -> (std::sync::Arc<Hub>, std::path::PathBuf) {
@@ -72,6 +72,10 @@ fn settings_routines_screen_and_devices() {
     assert_eq!(
         setting("setAssistants", json!({"enabled": true})),
         Some((Event::SettingChanged, json!("cloud_assistants"), json!(true)))
+    );
+    assert_eq!(
+        setting("setAutoOrder", json!({"enabled": true})),
+        Some((Event::SettingChanged, json!("auto_order"), json!(true)))
     );
     assert_eq!(
         props("networkJoin", &json!({"invite": "codync-network:…", "name": "laptop"})),
@@ -157,6 +161,13 @@ fn connectors_skills_and_agents() {
     );
     assert_eq!(written(json!({"id": "deploy"})).map(|(_, p)| p["change"].clone()), Some(json!("update")));
     assert_eq!(props("chatCall", &json!({"name": "send_message"})), None, "other chat tools aren't events");
+    let sent =
+        |arguments: Value| props("chatCall", &json!({"botId": "b", "name": "send_file", "arguments": arguments}));
+    assert_eq!(
+        sent(json!({"path": "/secret/note.m4a", "text": "never sent"})),
+        Some((Event::VoiceNoteSent, json!({"client": "local"})))
+    );
+    assert_eq!(sent(json!({"path": "report.pdf"})), None, "a file card isn't a voice note");
     let published = |arguments: Value| {
         observe(&Caller::Local, "chatCall", &json!({"botId": "b", "name": "publish_artifact", "arguments": arguments}))
             .expect("a publish is tracked")
@@ -188,6 +199,21 @@ fn connectors_skills_and_agents() {
         (event, Value::Object(p)),
         (Event::ConnectorInstalled, json!({"connector": "composio", "client": "local"}))
     );
+}
+
+#[test]
+fn decision_events_are_reported_only_by_the_actor_after_delivery() {
+    assert_eq!(
+        props(
+            "chatCall",
+            &json!({"botId": "b", "name": "request_decision", "arguments": {
+            "question": "Ship now or wait?", "options": ["Ship", "Wait"], "recommended": "Wait" }})
+        ),
+        None,
+        "API entry is not card publication"
+    );
+    assert_eq!(props("chatCall", &json!({"name": "request_decision"})).map(|(_, p)| p["options"].clone()), None);
+    assert_eq!(props("respondDecision", &json!({"entryId": "e", "option": "Ship"})), None);
 }
 
 #[test]
@@ -262,6 +288,15 @@ async fn store_lookups_add_fields_choice_and_platform() {
     hub.store.save_bot(&cfg).unwrap();
     let (_, p) = observe_call(&hub, &Caller::Local, "updateBot", &json!({"id": "b1", "permission": "auto"})).unwrap();
     assert_eq!(p["fields"], json!(["permission"]));
+    assert!(p.get("compaction").is_none());
+    let (_, p) = observe_call(&hub, &Caller::Local, "updateBot", &json!({"id": "b1", "compaction": 120_000})).unwrap();
+    assert_eq!((&p["fields"], &p["compaction"]), (&json!(["compaction"]), &json!("tokens")), "the kind, not the size");
+    // The apps send the whole form: an unchanged threshold in it isn't a pick.
+    let (_, p) =
+        observe_call(&hub, &Caller::Local, "updateBot", &json!({"id": "b1", "name": "c", "compaction": "off"}))
+            .unwrap();
+    assert_eq!(p["fields"], json!(["name"]));
+    assert!(p.get("compaction").is_none());
 
     let card = json!({"status": "pending", "options": [{"optionId": "o1", "name": "Allow", "kind": "allow_always"}]});
     let e =
@@ -280,7 +315,7 @@ async fn store_lookups_add_fields_choice_and_platform() {
             lease_until: None,
             created_at: 0,
             last_seen_at: None,
-            account: None,
+            account: DeviceAccount::Unrecorded,
         })
         .unwrap();
     let (event, p) = observe_call(&hub, &phone, "respondPermission", &answer).unwrap();

@@ -2,6 +2,7 @@
 //! apps and helpers (loopback + `Authorization: Bearer <token>`), and `GET /channel`, the
 //! direct end-to-end encrypted channel phones use (see `channel`).
 
+mod board;
 mod bots;
 pub mod devices;
 mod events;
@@ -102,6 +103,10 @@ async fn route(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value) -> Resul
         ControlFlow::Continue(b) => b,
     };
     let b = match network::call(hub, method, b).await? {
+        ControlFlow::Break(v) => return Ok(v),
+        ControlFlow::Continue(b) => b,
+    };
+    let b = match board::call(hub, method, b).await? {
         ControlFlow::Break(v) => return Ok(v),
         ControlFlow::Continue(b) => b,
     };

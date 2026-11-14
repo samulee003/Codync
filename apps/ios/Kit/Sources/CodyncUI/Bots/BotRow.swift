@@ -18,12 +18,18 @@ public struct BotRow: View {
 
     public var body: some View {
         HStack(spacing: 12) {
-            AvatarWithStatus(bot: bot, members: model.members(of: bot), size: avatar)
-                .overlay(alignment: .bottomLeading) {
-                    if let agent {
-                        AgentBadge(registry: model.agentRegistry(agent), size: avatar * 0.4)
+            VStack(spacing: 4) {
+                AvatarWithStatus(bot: bot, members: model.members(of: bot), size: avatar)
+                    .overlay(alignment: .bottomLeading) {
+                        if let agent {
+                            AgentBadge(registry: model.agentRegistry(agent), size: avatar * 0.4)
+                        }
                     }
+                // Stamina sits under the avatar like a game character's; a group has no agent of its own.
+                if !bot.isGroup, let stamina = model.usage.stamina?[bot.backend] {
+                    StaminaBar(stamina: stamina, width: avatar * 0.8)
                 }
+            }
             VStack(alignment: .leading, spacing: lineSpacing) {
                 HStack(alignment: .firstTextBaseline) {
                     if bot.pinned {

@@ -7,42 +7,18 @@ released version's section; a version without one gets the PRs' "What's New: And
 else a generic "Bug fixes and improvements" line. Delete old sections.
 -->
 
-## 2.41.0
+## 2.46.1
 ### zh-Hant
+- bot 詳細資料的「電腦」分頁改成點一下才開始顯示畫面，不會一打開就連線。
+- 遠端畫面在 5 分鐘沒有碰 App 後會自動暫停以節省流量，點一下就能繼續，原本的「接手控制」或「交還給 Bot」都會保留。
+- 權限核准卡片與連線請求卡片現在會跟著 app 的語言顯示。
+- 新增團隊任務板：在 bot 列表點清單按鈕，就能新增任務、指派給 bot，並查看 bot 認領、記錄和完成的進度。git 專案裡的任務會各自用獨立的分支工作，完成後可以直接在任務板上合併。
+- 任務板新增「等你處理」：bot 提出計畫時可以核准或要求修改，有問題時在任務上回答。新任務可以寫驗收條件，每一條會顯示是否通過。
+- 主帥 bot 會把大任務拆成子任務分給其他 bot 同時進行，完成後由另一個 bot 審查。
 - 電腦上有多個 bot 同時操作時，每一個都會顯示正在使用電腦的標記。
-### en-US
-- Every bot that is using the computer at the same time now shows the in-use marker, not just one.
-
-## 2.40.2
-### zh-Hant
-- bot 現在可以讓 dev server 持續在電腦上執行，不會因為 bot 閒置或重新啟動而中斷。port 會顯示在聊天標題下方；點 bot 的名稱，就能看記錄、重新啟動或停止；手機連得到電腦時，也能直接開啟。
-- 用量頁面可以自己選要看哪些服務並調整順序：預設只顯示 bot 正在用的，也可以打開或隱藏其他服務，或拖曳排列。另外支援顯示 Google Antigravity 和 GitHub Copilot 的額度。
 
 ### en-US
-- Bots can now keep a dev server running on your computer, even when the bot goes idle or restarts. Its port shows under the chat title; tap the bot's name to read its logs, restart or stop it, and to open it when your phone can reach it.
-- Choose and arrange which agents show in Usage: by default it lists the ones your bots run, and you can turn others on, hide them or drag them into order. Usage now also reads Google Antigravity's and GitHub Copilot's limits.
-
-## 2.39.0
-### zh-Hant
-- 第一次設定時，如果帳號裡已有電腦，可以向它申請訪問，或配對一臺新電腦（例如 VPS）。安裝頁也能一鍵複製網站連結，到電腦上下載。
-- bot 工作中送出的訊息會排在輸入框上方，可立即送出或收回。
-- bot 用了不只一種智慧體時，列表會在頭像左下角標出各自的智慧體標誌，可在「設定 › 外觀」關閉。
-- 修正與電腦的連線中斷時，app 可能閃退的問題。
-- 語音通話中語音辨識偶爾出錯時，會送出已聽到的內容並繼續聆聽，不再直接結束通話。
-- 介面新增巴西葡萄牙文：可在設定選擇「Português (Brasil)」，或跟隨系統的葡萄牙文語言。
-- 新增俄文介面：在設定選擇「Русский」，或跟隨系統的俄文語言。
-- 用 QR Code 配對的電腦如果當下沒能加入帳號，下次連上時會自動補上。
-- 語音通話的對話紀錄更好讀，通話列在 bot 沒說話時也會顯示一排靜止的點。
-- 排隊狀態、例行任務和執行紀錄會跟隨介面語言，名稱與訊息保留原文。
-- 新增義大利文介面：可在設定選擇「Italiano」，或跟隨系統的義大利文語言。
-- 擴充功能的「已安裝」提示也會顯示技能的圖示。
-
-### en-US
-- Messages sent while a bot works wait above the box: send now or take back.
-- First-time setup offers your account's computers or a new one.
-- When bots use different agents, the list shows each one's logo (off in Settings).
-- Fixed a crash when the connection dropped.
-- A one-off speech error no longer ends a voice call.
-- Choose Português (Brasil), Русский or Italiano in Settings.
-- A QR-paired computer joins your account when it next connects.
-- Calls read more clearly.
+- The Computer tab in bot details starts its picture when you tap it, instead of connecting as soon as it opens.
+- A computer's screen pauses after 5 minutes without you touching the app, to save data. Tap to continue; your Take over or Hand back to bots choice stays.
+- Approval and connection request cards now follow the app's language.
+- New team board (checklist button): bots share tasks; approve plans, answer questions, see each criterion pass.

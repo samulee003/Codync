@@ -5,6 +5,7 @@ mod analytics;
 mod analytics_cli;
 mod api;
 mod background;
+mod board;
 mod chat;
 mod cloud_cli;
 mod compat;
@@ -14,6 +15,7 @@ mod hub;
 mod icons;
 mod import;
 mod import_cli;
+mod keeper;
 mod local_api;
 mod market;
 mod mcp;
@@ -85,9 +87,10 @@ enum Sub {
     Serve {
         #[arg(long, default_value_t = service::DEFAULT_PORT)]
         port: u16,
-        /// Address to bind. Defaults to all interfaces so the phone can reach it over Tailscale/LAN.
-        #[arg(long, default_value = "0.0.0.0")]
-        bind: String,
+        /// Address to bind for this run. Defaults to the one `install --bind` saved, else all
+        /// interfaces so the phone can reach it over Tailscale/LAN.
+        #[arg(long)]
+        bind: Option<std::net::IpAddr>,
     },
     /// Show a one-time pairing QR code for the Codync iOS app (the host must be running).
     Pair {
@@ -131,6 +134,10 @@ enum Sub {
     Install {
         #[arg(long, default_value_t = service::DEFAULT_PORT)]
         port: u16,
+        /// Address the service listens on, kept through updates: `127.0.0.1` (this computer
+        /// and the relay only) or `0.0.0.0` (every interface, the default). Omitted: unchanged.
+        #[arg(long)]
+        bind: Option<std::net::IpAddr>,
     },
     /// Stop and remove the background service.
     Uninstall,
@@ -148,6 +155,9 @@ enum Sub {
         /// Allow a manual update to interrupt active bots (their sessions resume).
         #[arg(long)]
         force: bool,
+        /// Install this release instead of the latest (never one older than the running host).
+        #[arg(long, conflicts_with_all = ["check", "status", "auto"])]
+        target: Option<String>,
         #[arg(long, default_value_t = service::DEFAULT_PORT)]
         port: u16,
         #[arg(long)]
@@ -199,6 +209,10 @@ enum Sub {
     /// Add Codync's own Node.js, for agents that run on it (an agent's setup step).
     #[command(hide = true)]
     Node,
+    /// Keep a Codync Cloud computer's secrets, so its agents can use them but never read them (its own system
+    /// service there).
+    #[command(hide = true)]
+    Keeper,
     /// Built-in MCP servers that bots are started with (stdio).
     #[command(hide = true)]
     Mcp {
@@ -346,8 +360,8 @@ async fn main() -> Result<()> {
     // Every TLS connection (the relay, HTTPS) uses aws-lc-rs, also in builds that have ring too.
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let cli = Cli::parse();
-    match cli.cmd.unwrap_or(Sub::Serve { port: service::DEFAULT_PORT, bind: "0.0.0.0".into() }) {
-        Sub::Serve { port, bind } => serve(&bind, port).await,
+    match cli.cmd.unwrap_or(Sub::Serve { port: service::DEFAULT_PORT, bind: None }) {
+        Sub::Serve { port, bind } => serve(bind, port).await,
         Sub::Pair { port, json } => pair_cli::pair(port, json).await,
         Sub::Info { port, json } => info(port, json).await,
         Sub::Send(args) => send_cli::run(args).await,
@@ -377,8 +391,11 @@ async fn main() -> Result<()> {
         Sub::Cloud(args) => cloud_cli::run(args).await,
         Sub::Analytics(args) => analytics_cli::run(args).await,
         Sub::Network(args) => network_cli::run(args).await,
-        Sub::Install { port } => {
+        Sub::Install { port, bind } => {
             open_store()?;
+            if let Some(addr) = bind {
+                service::bind::save(addr)?;
+            }
             // Windows: the shell Claude Code runs status lines in varies (Git Bash, PowerShell), so
             // the line stays the user's; usage still comes from `claude -p /usage` and ACP.
             if cfg!(unix)
@@ -404,7 +421,7 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
-        Sub::Update { check, status, auto, force, port, json, worker } => {
+        Sub::Update { check, status, auto, force, target, port, json, worker } => {
             let status = if let Some(auto) = auto {
                 update::set_automatic(auto == "on")?
             } else if status {
@@ -412,10 +429,10 @@ async fn main() -> Result<()> {
             } else if check {
                 update::check().await?
             } else if !worker && service::installed() {
-                tokio::task::spawn_blocking(move || update::spawn_worker(port, force)).await??;
+                tokio::task::spawn_blocking(move || update::spawn_worker(port, force, target.as_deref())).await??;
                 update::status()?
             } else {
-                update::apply(port, force, worker).await?
+                update::apply(port, force, worker, target.as_deref()).await?
             };
             if json {
                 println!("{}", serde_json::to_string_pretty(&status)?);
@@ -458,14 +475,16 @@ async fn main() -> Result<()> {
                 .send()
                 .await
                 .is_ok_and(|r| r.status().is_success());
+            let bind = service::bind::load().map_or_else(|e| format!("{e:#}"), |addr| addr.to_string());
             println!(
-                "installed: {}\nrunning:   {running}\nport:      {port}\ndata:      {}",
+                "installed: {}\nrunning:   {running}\nport:      {port}\nbind:      {bind}\ndata:      {}",
                 service::installed(),
                 service::data_dir().display()
             );
             Ok(())
         }
         Sub::Node => agent::node::add().await,
+        Sub::Keeper => keeper::run().await,
         Sub::Npm { args } => std::process::exit(agent::node::npm(&args).await?),
         Sub::Statusline { port, wrapped } => {
             statusline(port, wrapped.join(" ")).await;
@@ -505,9 +524,13 @@ fn cap_log() {
     }
 }
 
-async fn serve(bind: &str, port: u16) -> Result<()> {
+async fn serve(bind: Option<std::net::IpAddr>, port: u16) -> Result<()> {
     let _instance_lock = tokio::task::spawn_blocking(service::lock_host).await??;
     tokio::task::spawn_blocking(service::capture_binary_identity).await??;
+    let bind = match bind {
+        Some(addr) => addr,
+        None => tokio::task::spawn_blocking(service::bind::load).await??,
+    };
     let listener =
         tokio::net::TcpListener::bind((bind, port)).await.with_context(|| format!("binding {bind}:{port}"))?;
     cap_log();
@@ -526,9 +549,9 @@ async fn serve(bind: &str, port: u16) -> Result<()> {
     let hub = hub::Hub::new(store, host_id, identity, token, port);
     hub.start()?;
     network::start(&hub).await;
-    analytics::host_started(&hub, service::started_by_service());
+    analytics::host_started(&hub, service::started_by_service(), bind.is_loopback());
     let agent_checks = background::start(&hub);
-    tracing::info!(version = env!("CARGO_PKG_VERSION"), bind, port, "codync-host listening");
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), %bind, port, "codync-host listening");
     // Peer addresses: some settings may only be changed from this computer.
     let app = api::router(hub.clone()).into_make_service_with_connect_info::<std::net::SocketAddr>();
     // SSE/WebSocket clients can stay connected forever. Stop agents immediately
@@ -542,7 +565,7 @@ async fn serve(bind: &str, port: u16) -> Result<()> {
     hub.shutdown().await;
     background::stop_agent_checks(agent_checks).await;
     agent::acp::stop_all().await;
-    analytics::flush_before_exit(&hub).await;
+    analytics::flush_now(&hub).await;
     tracing::info!("codync-host stopped");
     // A keychain read may still wait on an unlock prompt; dropping the runtime would wait for it.
     std::process::exit(0)

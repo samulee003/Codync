@@ -7,7 +7,7 @@ import Testing
     let lines = try String(contentsOf: url, encoding: .utf8).split(separator: "\n")
     let events = lines.compactMap { HostClient.parseEvent(Data($0.dropFirst(5).utf8)) }
     #expect(events.count == 6)
-    guard case let .hello(hostId, rev, usage, _, network) = events[0] else { Issue.record("hello"); return }
+    guard case let .hello(hostId, rev, usage, _, network, _) = events[0] else { Issue.record("hello"); return }
     #expect(hostId == "h1" && rev == 42 && usage.providers.first?.windows.first?.percent == 8)
     #expect(network == nil, "a host before the network view")
     guard case let .bot(bot) = events[1] else { Issue.record("bot"); return }
@@ -40,6 +40,13 @@ import Testing
     #expect(s.operatingBot(watching: "b2") == "b2")
     #expect(s.operatingBot(watching: "b3") == "b1")
     #expect(s.operatingBot() == "b1")
+}
+
+@Test func parsesAutoOrderEvents() {
+    guard case .autoOrder(true) = HostClient.parseEvent(Data(#"{"type":"autoOrder","enabled":true}"#.utf8)) else {
+        Issue.record("autoOrder"); return
+    }
+    #expect(HostClient.parseEvent(Data(#"{"type":"autoOrder"}"#.utf8)) == nil)
 }
 
 @Test func screenViewportMapsAndZooms() {

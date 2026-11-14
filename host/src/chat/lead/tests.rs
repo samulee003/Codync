@@ -139,6 +139,7 @@ async fn check_ins_wait_while_the_plan_is_nearly_used_up() {
             updated_at: 0,
         }],
         services: Vec::new(),
+        stamina: std::collections::BTreeMap::new(),
     };
     f.hub.update_usage(|usage| *usage = used(40.0));
     assert!(!check_in_waits(&f.hub, &routine, &lead, &scheduled));

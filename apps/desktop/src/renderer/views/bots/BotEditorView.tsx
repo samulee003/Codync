@@ -9,10 +9,12 @@ import { Icon } from '../../components/Icon'
 import { ModalHeader, Sheet, SheetPage, useDismiss } from '../../components/Overlay'
 import { HStack } from '../../components/Stack'
 import { Text } from '../../components/Text'
+import { controlReady } from '../../lib/screen-state'
 import { useStore } from '../../store/context'
 import { useAgentModels } from './agent-models'
 import { AgentModelPicker } from './AgentModelPicker'
 import { ApprovalRow } from './ApprovalRow'
+import { CompactionRow } from './CompactionRow'
 import { agentChoice, AgentStepBanner, FallbacksRow } from './Fallbacks'
 import { errorText, isValid, lastPathComponent, normalized, useFollowSaved, usePlugins, type Plugins } from './drafts'
 import { FormSheet } from '../marketplace/pieces'
@@ -167,6 +169,8 @@ function BotSettingsForm({ draft, onChange, error, plugins, part = 'all' }: {
       onChange={(on) => set('selfFallbacks', on)}
     />,
   ] : null
+  // Only where Codync summarizes the chat (its bot says): CardSection gives every child a row.
+  const compaction = saved && saved.compaction !== null ? <CompactionRow key="compaction" draft={draft} bot={saved} onChange={onChange} /> : null
 
   if (part === 'often') {
     return (
@@ -177,6 +181,7 @@ function BotSettingsForm({ draft, onChange, error, plugins, part = 'all' }: {
             {step}
             {agent}
             {fallbacks}
+            {compaction}
           </CardSection>
           {error ? <Text size="footnote" tone="danger" className="fade-in">{error}</Text> : null}
         </div>
@@ -215,6 +220,7 @@ function BotSettingsForm({ draft, onChange, error, plugins, part = 'all' }: {
           </ValueRow>
           {part === 'all' ? agent : null}
           {part === 'all' ? fallbacks : null}
+          {part === 'all' ? compaction : null}
           <ValueRow
             label="Workspace"
             detail={
@@ -245,7 +251,7 @@ function BotSettingsForm({ draft, onChange, error, plugins, part = 'all' }: {
             <SwitchRow
               title="Use the computer"
               detail={
-                store.screen.platform !== 'windows' && !(store.screen.enabled && store.screen.connected && store.screen.capture && store.screen.input)
+                !controlReady(store.screen)
                   ? 'Let this bot use apps. On that computer, open Codync → Settings → Computer access to set up permissions first.'
                   : store.screen.enabled
                   ? 'Let this bot see the screen and use the mouse and keyboard. You can watch and take over from your phone.'

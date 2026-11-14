@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { isGroup, type Bot } from '@shared/models'
+import type { BotClass } from '@shared/sheet'
 import { BotAvatar, CharacterAvatar, GroupAvatar } from '../../components/Avatar'
+import { ClassPicker } from '../../components/ClassPicker'
 import { Button, ChoicePicker, Spinner } from '../../components/Controls'
 import { ModalHeader, useDismiss } from '../../components/Overlay'
 import { HStack, Spacer, VStack } from '../../components/Stack'
@@ -25,10 +27,15 @@ export interface ComputerChoice {
 export function NewBotView({ computer }: { computer: ComputerChoice | null }) {
   const store = useStore()
   const [draft, setDraft] = useState(newDraft)
+  const [botClass, setBotClass] = useState<BotClass | null>(null)
+  const client = store.client
+  useEffect(() => { void store.sheets.load(client) }, [store, client])
 
   const create = async () => {
     const bot = await store.save(fillDefaults(store, { ...draft, name: draft.name.trim() }))
     store.setSelection(bot.id)
+    // The class lives on the bot's character sheet, which the bot now has.
+    if (botClass) await store.sheets.setClass(client, bot.id, botClass)
   }
 
   return (
@@ -48,6 +55,7 @@ export function NewBotView({ computer }: { computer: ComputerChoice | null }) {
         onShape={(avatarShape) => setDraft((d) => ({ ...d, avatarShape }))}
         onColor={(avatarColor) => setDraft((d) => ({ ...d, avatarColor }))}
       />
+      {store.sheets.available ? <ClassPicker selection={botClass} onChange={setBotClass} /> : null}
     </CreateLayout>
   )
 }
@@ -132,7 +140,7 @@ function CreateLayout({ title, preview, name, placeholder, onName, canCreate, co
 
   return (
     <VStack className="create-sheet">
-      <ModalHeader title={title} />
+      <ModalHeader title={tr(title)} />
       <VStack align="center" gap={20} className="create-body">
         {preview}
         <input
@@ -151,7 +159,7 @@ function CreateLayout({ title, preview, name, placeholder, onName, canCreate, co
       </VStack>
       <HStack gap={8} className="create-footer">
         {computer ? (
-          <HStack gap={8}>
+          <HStack gap={8} shrink>
             <Text tone="secondary">{tr(`On`)}</Text>
             <ChoicePicker selection={computer.selection} options={computer.options} onChange={computer.onChange} />
           </HStack>

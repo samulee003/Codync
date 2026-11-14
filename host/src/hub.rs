@@ -79,6 +79,7 @@ pub struct Hub {
     pub analytics: crate::analytics::Analytics,
     pub routines: crate::routines::Routines,
     pub team: crate::chat::team::Requests,
+    pub board: crate::board::Board,
     pub groups: crate::chat::group::Rooms,
     /// The user's other computers (codync-network), once this one is in a network.
     pub network: crate::network::Network,
@@ -132,10 +133,12 @@ impl Hub {
     pub fn new(store: Store, host_id: String, identity: Identity, token: String, port: u16) -> Arc<Self> {
         let (events, _) = broadcast::channel(1024);
         let screen = Arc::new(Screen::new(Screen::load_enabled(&store), events.clone()));
+        screen.restore_driver(&store);
         Arc::new(Self {
             analytics: crate::analytics::Analytics::load(&store),
             routines: crate::routines::Routines::default(),
             team: crate::chat::team::Requests::default(),
+            board: crate::board::Board::default(),
             groups: crate::chat::group::Rooms::default(),
             network: crate::network::Network::default(),
             waiting: crate::chat::team::remote::Waiting::default(),
@@ -167,8 +170,11 @@ impl Hub {
     }
 
     pub fn start(self: &Arc<Self>) -> Result<()> {
-        // Approval cards and queued sends from a previous run can't be honored anymore.
-        self.store.expire_pending()?;
+        // Approval and choice cards and queued sends from a previous run can't be honored anymore.
+        let expired = self.store.expire_pending()?;
+        for _ in 0..expired.decisions {
+            crate::chat::decision::Expiry::Restart.capture(self);
+        }
         crate::chat::memory::import_old_memory(self);
         self.routines.restore(&self.store)?;
         crate::market::turn_on_installed_once(&self.store)?;
@@ -311,6 +317,12 @@ impl Hub {
     /// Persists and broadcasts a new transcript entry. A failed write is logged here
     /// (once) and yields `None`: the conversation goes on without that line.
     pub fn add_entry(&self, lane: &Lane, kind: EntryKind, turn: i64, data: &Value) -> Option<Entry> {
+        let e = self.insert_entry(lane, kind, turn, data)?;
+        self.order_on_message(&e);
+        Some(e)
+    }
+
+    fn insert_entry(&self, lane: &Lane, kind: EntryKind, turn: i64, data: &Value) -> Option<Entry> {
         let _g = self.emit_lock.locked();
         match self.store.insert_entry(lane, kind, turn, data) {
             Ok(e) => {
@@ -337,10 +349,16 @@ impl Hub {
         turn: i64,
         data: &Value,
     ) -> Result<(Entry, bool)> {
-        let _guard = self.emit_lock.locked();
-        let (entry, added) = self.store.insert_entry_once(id, lane, kind, turn, data)?;
+        let (entry, added) = {
+            let _guard = self.emit_lock.locked();
+            let (entry, added) = self.store.insert_entry_once(id, lane, kind, turn, data)?;
+            if added {
+                let _ = self.events.send(json!({"type":"entry","rev":entry.rev,"entry":entry}));
+            }
+            (entry, added)
+        };
         if added {
-            let _ = self.events.send(json!({"type":"entry","rev":entry.rev,"entry":entry}));
+            self.order_on_message(&entry);
         }
         Ok((entry, added))
     }
@@ -352,6 +370,16 @@ impl Hub {
 
     /// [`Self::set_entry`] that also moves the entry into `turn` when given.
     pub fn set_entry_turn(&self, id: &str, turn: Option<i64>, data: &Value) -> Option<Entry> {
+        // A reply counts as a message once it's finished, which is an update; nothing else here is a new message.
+        let finishes = data["final"] == true && self.store.entry(id).is_some_and(|old| old.data["final"] != true);
+        let e = self.update_entry(id, turn, data)?;
+        if finishes {
+            self.order_on_message(&e);
+        }
+        Some(e)
+    }
+
+    fn update_entry(&self, id: &str, turn: Option<i64>, data: &Value) -> Option<Entry> {
         let _g = self.emit_lock.locked();
         match self.store.update_entry_turn(id, turn, data) {
             Ok(e) => {

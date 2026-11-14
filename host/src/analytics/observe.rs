@@ -5,6 +5,8 @@ use super::{Event, platform_of};
 use crate::api::devices::Caller;
 use crate::hub::Hub;
 use crate::store::BotConfig;
+use codync_mem::compaction::Threshold;
+use serde::Deserialize;
 use serde_json::{Map, Value};
 
 /// Methods that stand for one event with one fixed property.
@@ -27,12 +29,15 @@ const FIXED: [(&str, Event, &str, &str); 14] = [
 ];
 
 /// Switches the host owns (`setting_changed`): the method and the setting it names.
-const SETTINGS: [(&str, &str); 5] = [
+const SETTINGS: [(&str, &str); 7] = [
     ("setCloud", "remote_access"),
     ("setApproval", "approval"),
     ("setHostAutomaticUpdates", "automatic_updates"),
     ("setScreenEnabled", "remote_screen"),
     ("setAssistants", "cloud_assistants"),
+    // `on`: agent-desktop (several bots at once) instead of the default driver.
+    ("setComputerDriver", "computer_driver"),
+    ("setAutoOrder", "auto_order"),
 ];
 
 /// The event an API call stands for, with its properties, read before the call runs.
@@ -48,7 +53,11 @@ pub fn observe(caller: &Caller, method: &str, b: &Value) -> Option<(Event, Map<S
         p.insert(key.into(), value.into());
         event
     } else if let Some(&(_, setting)) = SETTINGS.iter().find(|s| s.0 == method) {
-        let on = if method == "setApproval" { b["approval"] == "auto" } else { b["enabled"] == true };
+        let on = match method {
+            "setApproval" => b["approval"] == "auto",
+            "setComputerDriver" => b["driver"] == "agentDesktop",
+            _ => b["enabled"] == true,
+        };
         p.insert("setting".into(), setting.into());
         p.insert("on".into(), on.into());
         Event::SettingChanged
@@ -165,6 +174,57 @@ fn call_event(method: &str, b: &Value, p: &mut Map<String, Value>) -> Option<Eve
             p.insert("change".into(), (if update { "update" } else { "new" }).into());
             Event::ArtifactPublished
         }
+        // The team board (`board`): what changed and who changed it, never a task's text.
+        "createTask" | "editTask" | "noteTask" | "assignTask" | "setTaskStatus" | "mergeTask" | "deleteTask"
+        | "splitGoal" | "setBotClass" | "approvePlan" | "revisePlan" | "answerQuestions" | "saveTaskTemplate"
+        | "deleteTaskTemplate" | "forgetLessons" => {
+            let action = match method {
+                "setBotClass" => Some("class"),
+                "approvePlan" => Some("approve_plan"),
+                "revisePlan" => Some("revise_plan"),
+                "answerQuestions" => Some("answer_questions"),
+                "saveTaskTemplate" => Some("save_template"),
+                "deleteTaskTemplate" => Some("delete_template"),
+                "forgetLessons" => Some("forget_lessons"),
+                "setTaskStatus" => b["status"].as_str().filter(|s| matches!(*s, "open" | "done" | "cancelled")),
+                "splitGoal" => Some("split"),
+                other => other.strip_suffix("Task"),
+            };
+            p.insert("action".into(), action.unwrap_or("other").into());
+            p.insert("by".into(), "user".into());
+            // A new task's work order: whether it came with criteria, and whether its plan is approved first.
+            if method == "createTask" {
+                let criteria = b["acceptance"].as_array().is_some_and(|a| !a.is_empty())
+                    || b["acceptance"].as_str().is_some_and(|s| !s.trim().is_empty());
+                p.insert("criteria".into(), criteria.into());
+                p.insert("approvePlan".into(), b["approvePlan"].as_bool().unwrap_or(true).into());
+            }
+            Event::TaskChanged
+        }
+        "teamCall"
+            if b["name"].as_str().is_some_and(|n| {
+                crate::board::tools::TOOLS.contains(&n) && !n.starts_with("list") && !n.starts_with("read")
+            }) =>
+        {
+            let name = b["name"].as_str().unwrap_or_default();
+            p.insert("action".into(), name.strip_suffix("_task").unwrap_or(name).into());
+            p.insert("by".into(), "bot".into());
+            // A check's outcome: accepted or sent back.
+            if name == "review_task" {
+                let args = &b["arguments"];
+                let approve = match args["checks"].as_array() {
+                    Some(checks) => Some(checks.iter().all(|c| c["pass"].as_bool() == Some(true))),
+                    None => args["approve"].as_bool(),
+                };
+                if let Some(approve) = approve {
+                    p.insert("approved".into(), approve.into());
+                }
+                p.insert("criteria".into(), args["checks"].as_array().map_or(0, Vec::len).into());
+            }
+            Event::TaskChanged
+        }
+        // A bot's `send_file` with text: a voice note inside its message; never the file or the text.
+        "chatCall" if b["name"] == "send_file" && b["arguments"]["text"].is_string() => Event::VoiceNoteSent,
         "agentSetup" | "agentAuthenticate" => {
             // An agent's catalog id; Node.js setup names none.
             if let Some(agent) = b["backend"].as_str().filter(|a| !a.is_empty()) {
@@ -172,6 +232,7 @@ fn call_event(method: &str, b: &Value, p: &mut Map<String, Value>) -> Option<Eve
             }
             if method == "agentSetup" { Event::AgentSetupStarted } else { Event::AgentSignedIn }
         }
+        // Choices are counted by the actor after publication/delivery, including legacy text replies.
         "installHostUpdate" => Event::HostUpdateInstalled,
         // Never the computer's name, the connector's address or the invite.
         "networkCreate" | "networkJoin" => {
@@ -207,7 +268,13 @@ pub fn observe_call(hub: &Hub, caller: &Caller, method: &str, b: &Value) -> Opti
         }
         Event::BotUpdated => {
             if let Ok(Some(row)) = hub.store.bot(b["id"].as_str().unwrap_or_default()) {
-                p.insert("fields".into(), changed_fields(&row.config, b).into());
+                let fields = changed_fields(&row.config, b);
+                // Which kind of threshold the user picked, never its size.
+                if fields.iter().any(|f| f == "compaction") {
+                    let picked = Threshold::deserialize(&b["compaction"]).unwrap_or_default();
+                    p.insert("compaction".into(), picked.kind().into());
+                }
+                p.insert("fields".into(), fields.into());
             }
         }
         Event::PermissionAnswered => {

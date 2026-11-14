@@ -27,6 +27,13 @@ jobs:
           # Wait for SpringBoard before UIKit tests start, and use this ready device
           # instead of booting parallel test simulators on the shared runner.
           xcrun simctl bootstatus "$DEVICE" -b
+          # GitHub's release downloads (the WebRTC binary package) answer 504 now and then: resolve the packages first,
+          # retrying, so the test run finds them cached.
+          for attempt in 1 2 3 4; do
+            xcodebuild -resolvePackageDependencies -scheme CodyncKit-Package && break
+            [ "$attempt" = 4 ] && exit 1
+            echo "Swift packages didn't resolve; trying again"; sleep $((attempt * 30))
+          done
           # A test that fails is run again, up to twice: a timing hiccup on a busy runner no longer fails
           # the whole run (the result bundle still records the retries).
           xcodebuild test -scheme CodyncKit-Package -destination "platform=iOS Simulator,id=$DEVICE" -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/CodyncKit.xcresult" -retry-tests-on-failure -test-iterations 3 -quiet

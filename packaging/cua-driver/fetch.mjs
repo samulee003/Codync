@@ -22,9 +22,7 @@ const cache = join(here, '../../build/cua-driver')
 const archive = join(cache, spec.asset)
 if (!existsSync(archive) || sha256(readFileSync(archive)) !== spec.sha256) {
   const url = `https://github.com/trycua/cua/releases/download/${pin.tag}/${spec.asset}`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`)
-  const data = Buffer.from(await res.arrayBuffer())
+  const data = await download(url)
   if (sha256(data) !== spec.sha256) throw new Error(`${spec.asset} doesn't match its pinned SHA-256`)
   mkdirSync(cache, { recursive: true })
   writeFileSync(archive, data)
@@ -46,3 +44,23 @@ try {
   rmSync(unpacked, { recursive: true, force: true })
 }
 console.log(`cua-driver ${pin.version} (${target}) → ${out}`)
+
+/** GitHub's release downloads answer 5xx now and then (a 504 failed whole builds): a few tries, a little apart. */
+async function download(url, tries = 4) {
+  for (let attempt = 1; ; attempt++) {
+    let failure
+    try {
+      const res = await fetch(url)
+      if (res.ok) return Buffer.from(await res.arrayBuffer())
+      // A client error (a wrong tag or asset) won't fix itself.
+      if (res.status < 500) throw Object.assign(new Error(`${url}: HTTP ${res.status}`), { final: true })
+      failure = new Error(`${url}: HTTP ${res.status}`)
+    } catch (error) {
+      if (error.final) throw error
+      failure = error
+    }
+    if (attempt >= tries) throw failure
+    console.warn(`${failure.message}; trying again (${attempt + 1}/${tries})`)
+    await new Promise((resolve) => setTimeout(resolve, attempt * 15_000))
+  }
+}

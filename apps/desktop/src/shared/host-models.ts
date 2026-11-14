@@ -31,6 +31,22 @@ export interface Usage {
   providers: UsageProvider[]
   /** Absent from a host older than the chooser. */
   services?: UsageService[]
+  /** Each agent's tightest limit left, by every name a bot's `backend` may give it (`host/src/usage/stamina.rs`). */
+  stamina?: Record<string, Stamina>
+}
+
+/** How much of a bot's agent's plan is left: the bar beside the bot in the roster. */
+export interface Stamina {
+  /** Share of the tightest limit left, 0–100. */
+  left: number
+  label: string
+  resetsAt?: number | null
+  resetsText?: string | null
+}
+
+/** The bar's color: full, getting low, nearly out. */
+export function staminaLevel(left: number): 'full' | 'low' | 'out' {
+  return left >= 50 ? 'full' : left >= 20 ? 'low' : 'out'
 }
 
 export interface Backend {
@@ -73,7 +89,16 @@ export interface ScreenState {
   /** Bots with computer use can act here (Windows: always; elsewhere Remote screen is on). */
   computerUse: boolean
   viewers: number
+  /** Which driver runs the bots' computer tools (Settings → Computer access); undefined from hosts before the choice. */
+  driver?: ComputerDriver
+  /** The host's environment forces agent-desktop (`CODYNC_COMPUTER_DRIVER`), whatever `driver` says. */
+  driverForced?: boolean
+  /** The agent-desktop CLI is installed; without it the default driver runs. */
+  agentDesktopInstalled?: boolean
 }
+
+/** `default`: cua-driver, one bot at a time. `agentDesktop`: several bots at once, in the background. */
+export type ComputerDriver = 'default' | 'agentDesktop'
 
 export function normalizeScreen(raw: Partial<ScreenState> | undefined | null): ScreenState | null {
   if (!raw) return null
@@ -90,6 +115,9 @@ export function normalizeScreen(raw: Partial<ScreenState> | undefined | null): S
     agentBots: raw.agentBots ?? (raw.agentBot ? [raw.agentBot] : []),
     computerUse: raw.computerUse ?? false,
     viewers: raw.viewers ?? 0,
+    driver: raw.driver,
+    driverForced: raw.driverForced,
+    agentDesktopInstalled: raw.agentDesktopInstalled,
   }
 }
 
@@ -117,6 +145,8 @@ export interface Hello {
   cloud?: string | null
   /** Product analytics on this computer: on unless its owner turned it off. */
   analytics?: boolean
+  /** A bot with a new message moves to the top of the roster (`setAutoOrder`). Absent from older hosts. */
+  autoOrder?: boolean
 }
 
 export interface PairingInfo {
@@ -160,10 +190,16 @@ export interface PairingRequest {
   requestId: string
   deviceName: string
   platform?: string | null
-  /** The phone's account, which the computer joins. */
+  /** The phone's account, which the computer can join. */
   email?: string | null
   /** The 6 digits the phone shows too. */
   code: string
+  /** The phone is signed in and the Codync cloud is on, so the computer can join its account. */
+  canJoin?: boolean | null
+  /** The computer can stay out of an account: the phone then connects only over Wi-Fi or Tailscale. */
+  phoneOnly?: boolean | null
+  /** The phones that lose access if the computer joins. */
+  removes?: string[] | null
   expiresAt?: number | null
 }
 

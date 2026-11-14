@@ -58,25 +58,24 @@ pub(super) async fn call(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value
         "hello" => {
             let port = hub.port;
             let icons = crate::icons::snapshot(&hub.store)?;
-            let join_account = crate::remote::owner::joinable_by(hub, caller.device_key()).unwrap_or_else(|e| {
-                tracing::warn!(error = format!("{e:#}"), "couldn't check whether this phone can finish joining");
-                None
-            });
             json!({
                 "hostId": hub.host_id,
                 "computerId": hub.identity.computer_id(),
                 "signKey": hub.identity.sign_pub_b64(),
                 "boxKey": hub.identity.box_pub_b64(),
-                "cloud": crate::remote::cloud::url(&hub.store),
-                "name": crate::service::host_name(),
+                // Only where a phone may use it: in no account, phones go over Wi-Fi or Tailscale.
+                "cloud": crate::remote::owner::url_for_phones(hub, caller.device_key()),
+                "name": crate::remote::managed::computer_name(&hub.store),
                 "version": env!("CARGO_PKG_VERSION"),
                 "minApp": crate::compat::MIN_APP,
+                // What a client's copy of the conversation was synced under; it holds across versions.
+                "schema": crate::store::SCHEMA,
                 // Whether `installHostUpdate` can update this computer, from here or a phone.
                 "canUpdate": tokio::task::spawn_blocking(crate::update::installable).await?,
                 // The latest release, so a phone can say whether this computer is current (null: unknown).
                 "latestVersion": tokio::task::spawn_blocking(crate::update::latest_version).await?,
                 "os": std::env::consts::OS,
-                "device": tokio::task::spawn_blocking(crate::service::device).await?,
+                "device": crate::remote::managed::computer_device(&hub.store).await?,
                 "home": dirs::home_dir().map(|p| p.to_string_lossy().into_owned()),
                 "backends": backends::list(),
                 "icons": icons.icons,
@@ -84,8 +83,13 @@ pub(super) async fn call(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value
                 "rev": hub.store.current_rev(),
                 "screen": hub.screen.state(),
                 "analytics": hub.analytics.state(),
-                // This phone paired without the computer joining its account: it calls `joinAccount` to finish.
-                "joinAccount": join_account.is_some(),
+                // Whether a bot with a new message moves to the top of the roster (`setAutoOrder`).
+                "autoOrder": hub.auto_order(),
+                // Before 2.41.0, apps called `joinAccount` when this was true. It takes a certificate now, which they
+                // don't send, so they aren't told to.
+                "joinAccount": false,
+                // A signed-in phone may offer to bring this computer into its account (`joinAccount`).
+                "canJoinAccount": crate::remote::owner::can_join(hub),
                 // Shells out to `tailscale`: keep it off the async workers.
                 "urls": tokio::task::spawn_blocking(move || crate::service::addresses(port)).await?,
             })
@@ -207,11 +211,12 @@ pub(super) async fn call(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value
             json!({})
         }
         "screenTakeover" => {
-            hub.screen.takeover(b["on"].as_bool().unwrap_or(false));
+            hub.screen.takeover(caller.device_key(), b["on"].as_bool().unwrap_or(false));
             hub.screen.state()
         }
         "setAnalytics" => {
             hub.analytics.set_enabled(&hub.store, b["enabled"].as_bool().unwrap_or(false))?;
+            crate::remote::managed::share_analytics(hub);
             json!({"enabled": hub.analytics.state()})
         }
         "track" => {
@@ -222,8 +227,16 @@ pub(super) async fn call(hub: &Arc<Hub>, caller: &Caller, method: &str, b: Value
             crate::analytics::errors::report(hub, &b)?;
             json!({})
         }
+        "setAutoOrder" => {
+            hub.set_auto_order(b["enabled"].as_bool().context("enabled must be a boolean")?)?;
+            json!({"enabled": hub.auto_order()})
+        }
         "setScreenEnabled" => {
             hub.screen.set_enabled(&hub.store, b["enabled"].as_bool().unwrap_or(false)).await?;
+            hub.screen.state()
+        }
+        "setComputerDriver" => {
+            hub.screen.set_driver(&hub.store, crate::screen::ComputerDriver::parse(str_arg(&b, "driver")?)?)?;
             hub.screen.state()
         }
         "computerTools" => crate::screen::computer_tools(hub).await,

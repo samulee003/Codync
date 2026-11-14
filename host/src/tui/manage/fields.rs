@@ -4,6 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use serde_json::{Value, json};
 
 use super::super::app::{App, Editor, Entry, Overlay};
+use super::board_work;
 use super::market::connector_inputs;
 use super::{Fields, Input, Reply, Submit, ctrl, newline};
 
@@ -100,6 +101,27 @@ impl App {
             Submit::RenameArtifact { bot, artifact } => {
                 let body = json!({"botId": bot, "artifactId": artifact, "title": values["title"]});
                 self.sheet("renameArtifact", body, Reply::FieldsSaved);
+            }
+            Submit::NewTask => self.sheet("createTask", board_work::new_task_body(values), Reply::FieldsSaved),
+            Submit::RevisePlan(task) => {
+                self.sheet("revisePlan", json!({"taskId": task, "note": values["note"]}), Reply::FieldsSaved);
+            }
+            Submit::AnswerQuestions { .. } => {
+                let answer = values.get("answer").and_then(Value::as_str).unwrap_or_default().to_owned();
+                self.answer_next(f, answer);
+            }
+            Submit::SplitGoal => self.sheet("splitGoal", json!({"goal": values["goal"]}), Reply::GoalSplit),
+            Submit::BoardClaims(bots) => {
+                if let Some((bot, on)) = bots.get(f.choice) {
+                    self.sheet("setBoardClaims", json!({"botId": bot, "on": !on}), Reply::Board);
+                }
+            }
+            Submit::NoteTask(task) => {
+                self.sheet("noteTask", json!({"taskId": task, "text": values["text"]}), Reply::FieldsSaved);
+            }
+            Submit::AssignTask { task, bots } => {
+                let bot = bots.get(f.choice).cloned().unwrap_or_default();
+                self.sheet("assignTask", json!({"taskId": task, "botId": bot}), Reply::FieldsSaved);
             }
         }
     }

@@ -2,8 +2,9 @@ import Foundation
 
 public enum HostEvent: Sendable {
     case icons([String: CustomIcon], revision: Int64)
-    /// The stream's first event; `network` is nil from hosts before the network view.
-    case hello(hostId: String, rev: Int64, usage: Usage, screen: ScreenState?, network: NetworkView?)
+    /// The stream's first event; `network` is nil from hosts before the network view. `catchUp` events follow
+    /// before the live ones (nil from hosts before 2.32.0).
+    case hello(hostId: String, rev: Int64, usage: Usage, screen: ScreenState?, network: NetworkView?, catchUp: Int?)
     case bot(Bot)
     case botDeleted(id: String, rev: Int64)
     case entry(Entry)
@@ -11,11 +12,19 @@ public enum HostEvent: Sendable {
     case screen(ScreenState)
     /// An artifact published or renamed (the catch-up replays it too).
     case artifact(Artifact)
+    /// A team board task added, changed or deleted (`deleted`; the catch-up replays it too).
+    case task(BoardTask)
     /// For the voice of a call on this device (only the device holding the call receives it).
     case call(CallCue)
     /// The computer's network changed (members, roles, presence, offered bots, cloud assistants).
     case network(NetworkView)
+    /// The computer took a new name (a cloud computer renamed from any device): its `hello` says it from now on.
+    case name(String)
+    /// The computer's automatic bot order was switched (from any device): its `hello` says it from now on.
+    case autoOrder(Bool)
     case resync
+    /// One this app has no use for.
+    case skipped
     /// An event this app version couldn't decode (host newer/older than the app).
     case undecodable(type: String)
 }
@@ -60,7 +69,8 @@ public struct HostClient: Sendable {
 
     /// Catch-up since `since`, then live updates.
     public func events(since: Int64, client: String) -> AsyncThrowingStream<HostEvent, Error> {
-        map(transport.stream(.events(since: since, client: client)), Self.parseEvent)
+        // One this app has no use for still counts toward the catch-up `hello` announced.
+        map(transport.stream(.events(since: since, client: client))) { Self.parseEvent($0) ?? .skipped }
     }
 
     /// A setup terminal's output: everything so far, then live, finishing after `.exit`.
@@ -97,6 +107,7 @@ public struct HostClient: Sendable {
             var type: String
             var hostId: String?
             var rev: Int64?
+            var catchUp: Int?
         }
         struct BotWrap: Decodable { var bot: Bot }
         struct StubWrap: Decodable { var bot: BotStub }
@@ -104,6 +115,7 @@ public struct HostClient: Sendable {
         struct UsageWrap: Decodable { var usage: Usage }
         struct ScreenWrap: Decodable { var screen: ScreenState }
         struct ArtifactWrap: Decodable { var artifact: Artifact }
+        struct TaskWrap: Decodable { var task: BoardTask }
         struct NetworkWrap: Decodable { var network: NetworkView }
         let d = decoder
         guard let env = try? d.decode(Envelope.self, from: data) else { return nil }
@@ -115,7 +127,7 @@ public struct HostClient: Sendable {
             let usage = (try? d.decode(UsageWrap.self, from: data))?.usage ?? Usage()
             let screen = (try? d.decode(ScreenWrap.self, from: data))?.screen
             let network = (try? d.decode(NetworkWrap.self, from: data))?.network
-            return .hello(hostId: env.hostId ?? "", rev: env.rev ?? 0, usage: usage, screen: screen, network: network)
+            return .hello(hostId: env.hostId ?? "", rev: env.rev ?? 0, usage: usage, screen: screen, network: network, catchUp: env.catchUp)
         case "bot":
             if let stub = try? d.decode(StubWrap.self, from: data), stub.bot.deleted == true {
                 return .botDeleted(id: stub.bot.id, rev: stub.bot.rev)
@@ -130,11 +142,20 @@ public struct HostClient: Sendable {
         case "artifact":
             // Not worth a rewind: a card or the Library reads the artifact again.
             return (try? d.decode(ArtifactWrap.self, from: data)).map { .artifact($0.artifact) }
+        case "task":
+            // Not worth a rewind: the board reads `tasks` whenever it opens.
+            return (try? d.decode(TaskWrap.self, from: data)).map { .task($0.task) }
         case "call":
             return (try? d.decode(CallCue.self, from: data)).map { .call($0) }
         case "network":
             // Not worth a rewind: the next stream's hello carries the view again.
             return (try? d.decode(NetworkWrap.self, from: data)).map { .network($0.network) }
+        case "name":
+            struct NameWrap: Decodable { var name: String }
+            return (try? d.decode(NameWrap.self, from: data)).map { .name($0.name) }
+        case "autoOrder":
+            struct AutoOrderWrap: Decodable { var enabled: Bool }
+            return (try? d.decode(AutoOrderWrap.self, from: data)).map { .autoOrder($0.enabled) }
         case "resync":
             return .resync
         default:
@@ -156,10 +177,12 @@ public extension HostClient {
         let _: Empty = try await call("installHostUpdate")
     }
 
-    /// The computer signs `claim` for the account this phone paired from (`Hello.joinAccount`), as JSON to
-    /// pass on to `CloudClient.completeClaim` as it came.
-    func joinAccount(_ claim: CloudClaim) async throws -> Data {
-        try await transport.call("joinAccount", body: try Self.encoder.encode(claim), timeout: 20)
+    /// The computer asks its user (up to 90 seconds), then signs `claim` for this phone's account
+    /// (`Hello.canJoinAccount`), as JSON to pass on to `CloudClient.completeClaim` as it came.
+    func joinAccount(_ claim: CloudClaim, certificate: DeviceCertificate) async throws -> Data {
+        struct Body: Encodable { var claimId: String; var nonce: String; var certificate: DeviceCertificate }
+        let body = Body(claimId: claim.claimId, nonce: claim.nonce, certificate: certificate)
+        return try await transport.call("joinAccount", body: try Self.encoder.encode(body), timeout: 120)
     }
 
     func history(botId: String, beforeSeq: Int64, limit: Int = 100) async throws -> [Entry] {
@@ -287,6 +310,11 @@ public extension HostClient {
         return out
     }
 
+    /// Whether a bot with a new message moves to the top of the roster.
+    func setAutoOrder(_ enabled: Bool) async throws {
+        let _: Empty = try await self.call("setAutoOrder", ["enabled": enabled])
+    }
+
     /// The user makes this bot the lead, in place of the one before.
     func setLead(_ botId: String) async throws {
         let _: Empty = try await self.call("setLead", ["botId": botId])
@@ -368,6 +396,10 @@ public extension HostClient {
         let _: Empty = try await call("respondPermission", Body(entryId: entryId, optionId: optionId))
     }
 
+    func respondDecision(entryId: String, option: String) async throws {
+        let _: Empty = try await call("respondDecision", ["entryId": entryId, "option": option])
+    }
+
     /// Push tickets are bound to this device's key; `pushKey` lets the host seal notification text (§6.7).
     func registerDevice(ticket: String, relay: String, name: String, pushKey: String?, ctx: String) async throws {
         struct Body: Encodable { var ticket: String; var relay: String; var name: String; var pushKey: String?; var ctx: String }
@@ -403,32 +435,6 @@ public extension HostClient {
         struct Body: Encodable { var path: String? }
         return try await call("listDirs", Body(path: path))
     }
-
-    // MARK: remote screen
-
-    func screenStatus() async throws -> ScreenState { try await call("screenStatus") }
-
-    func screenPrepare() async throws -> ScreenConnection {
-        let relay = if let channel = transport as? ChannelTransport { try await channel.screenRelayRequired() } else { false }
-        return try await call("screenPrepare", ["relay": relay, "trickle": true])
-    }
-
-    /// Sends the offer using the prepared session’s negotiated ICE mode.
-    /// Trickle negotiations use a fresh session for every connection attempt.
-    func screenOffer(sdp: String, session: String?, display: UInt32?) async throws -> ScreenAnswer {
-        struct Body: Encodable { var sdp: String; var session: String?; var display: UInt32? }
-        return try await call("screenOffer", Body(sdp: sdp, session: session, display: display), timeout: 30)
-    }
-
-    func screenClose(session: String) async throws {
-        let _: Empty = try await call("screenClose", ["session": session])
-    }
-
-    /// Takes control from bots (they can still look) or hands it back.
-    func screenTakeover(_ on: Bool) async throws -> ScreenState {
-        try await call("screenTakeover", ["on": on])
-    }
-
 }
 
 // MARK: - Agent setup
@@ -482,9 +488,4 @@ public extension HostClient {
     func termClose(_ term: String) async throws {
         let _: Empty = try await call("termClose", ["term": term])
     }
-}
-
-public struct ScreenAnswer: Codable, Sendable {
-    public var session: String
-    public var sdp: String
 }

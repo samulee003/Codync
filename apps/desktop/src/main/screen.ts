@@ -33,6 +33,10 @@ export function setScreenAgent(on: boolean): { needsApproval: boolean } {
   // Registering an enabled agent is a no-op, so a helper launchd gave up on would never start again.
   if (on && status() === 'enabled') app.setLoginItemSettings({ type: 'agentService', serviceName, openAtLogin: false })
   app.setLoginItemSettings({ type: 'agentService', serviceName, openAtLogin: on })
+  // macOS refuses the agent of an app without a valid signature, and Electron doesn't say so: tell the user.
+  if (on && !['enabled', 'requires-approval'].includes(status())) {
+    throw new Error(`macOS didn't start Codync Screen (${status()}). An unsigned build can't run it: sign the app, then try again.`)
+  }
   prefs.set('screenHelperStamp', on ? helperStamp() : null)
   prefs.set('screenHelperResumeAfterUpdate', false)
   return { needsApproval: status() === 'requires-approval' }
