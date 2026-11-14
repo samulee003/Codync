@@ -8,9 +8,9 @@ on:
         type: boolean
         default: true
       release_tag:
-        description: 'Release Tag name (if publishing release)'
+        description: 'Release tag (if publishing a release). Empty: v<app version>. Keep it a plain version: the in-app updater skips tags with a suffix like -custom.'
         type: string
-        default: 'v2.42.1-custom'
+        default: ''
   push:
     tags:
       - 'v*'
@@ -100,6 +100,7 @@ jobs:
       - name: Generate Homebrew Cask formula
         run: |
           TAG="${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
+          [ -n "$TAG" ] || TAG="v$(node -p "require('./apps/desktop/package.json').version")"
           # A tag names the version (v2.41.0-custom → 2.41.0-custom); a branch build uses the app's own.
           case "$TAG" in
             v*) CLEAN_VERSION="${TAG#v}" ;;
@@ -120,6 +121,9 @@ jobs:
           path: |
             apps/desktop/dist/codync-macos.dmg
             apps/desktop/dist/codync-macos.dmg.sha256
+            apps/desktop/dist/codync-macos.zip
+            apps/desktop/dist/codync-macos.zip.blockmap
+            apps/desktop/dist/latest-mac.yml
             apps/desktop/dist/codync.rb
           if-no-files-found: error
 
@@ -129,8 +133,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
+          [ -n "$TAG" ] || TAG="v$(node -p "require('./apps/desktop/package.json').version")"
           cd apps/desktop/dist
-          FILES=(codync-macos.dmg codync-macos.dmg.sha256 codync.rb)
+          # The zip and latest-mac.yml are the app's update feed (electron-updater reads them from the latest release).
+          FILES=(codync-macos.dmg codync-macos.dmg.sha256 codync-macos.zip codync-macos.zip.blockmap latest-mac.yml codync.rb)
           # `gh release create` has no --clobber: re-running with the same tag replaces the files
           # of the existing release instead.
           if gh release view "$TAG" >/dev/null 2>&1; then
