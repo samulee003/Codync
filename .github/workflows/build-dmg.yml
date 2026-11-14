@@ -102,7 +102,9 @@ jobs:
 
       - name: Generate Homebrew Cask formula
         run: |
-          TAG="${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
+          # A tag push names the release; a manual run names it in the input, else it is v<app version> (a branch name is
+          # no version, and the in-app updater needs one).
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then TAG="${{ inputs.release_tag }}"; else TAG="${{ github.ref_name }}"; fi
           [ -n "$TAG" ] || TAG="v$(node -p "require('./apps/desktop/package.json').version")"
           # A tag names the version (v2.41.0-custom → 2.41.0-custom); a branch build uses the app's own.
           case "$TAG" in
@@ -135,7 +137,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
+          # A tag push names the release; a manual run names it in the input, else it is v<app version> (a branch name is
+          # no version, and the in-app updater needs one).
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then TAG="${{ inputs.release_tag }}"; else TAG="${{ github.ref_name }}"; fi
           [ -n "$TAG" ] || TAG="v$(node -p "require('./apps/desktop/package.json').version")"
           cd apps/desktop/dist
           # The zip and latest-mac.yml are the app's update feed (electron-updater reads them from the latest release).
