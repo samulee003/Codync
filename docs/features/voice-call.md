@@ -102,8 +102,8 @@ on-device (its window doesn't reach the host).
 
 ### Voice input shortcut
 
-Desktop on macOS, set in **Settings → General → System** (*Voice input shortcut*: off, the right ⌘
-twice (the default) or the left ⌘ twice; `voiceShortcut` in `host-prefs.json`). From any app, a
+Desktop on macOS, set in **Settings → General → System** (*Voice input shortcut*: off (the default), the right ⌘
+twice or the left ⌘ twice; `voiceShortcut` in `host-prefs.json`). From any app, a
 double tap of that key starts dictation into the [notch island](notch-island.md)'s message field
 while the island is on, else into the chat window's composer (when no chat is open, the lead, or the top bot where
 no computer has one).
@@ -232,10 +232,12 @@ shows the provider's name next to the dots whenever audio leaves the device.
 
 ### Where the key lives
 
-- On the computer, in the host's vault (`host/src/voice.rs`, slot `voice`: encrypted in
+- On the computer, in the host's vault (`host/src/voice/keys.rs`, slot `voice`: encrypted in
   `codync.db` with the vault key from Keychain / Secret Service), so one key serves the iPhone and the
   desktop app. It reaches the host once, over the encrypted channel, and never leaves it again; it is never
-  logged and never sent to the relay or our cloud.
+  logged and never sent to the relay or our cloud. On a Codync Cloud computer it goes on to the computer's keeper
+  instead (`host/src/voice/keys.rs`, proxied slot `voice:<provider>`), and the host reaches the provider through a
+  10-minute grant that adds the key: [Agents and the host's secrets](../plans/codync-cloud.md#agents-and-the-hosts-secrets).
 - Host methods (control scope): `voiceStatus` (which providers have a key), `setVoiceKey
   {provider, key}` (checked with one credential mint before it's kept; empty removes it),
   `voiceSession {provider, model, voice}` → `{credential}`, `voiceModels {provider}` → `{models,

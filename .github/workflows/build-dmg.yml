@@ -8,9 +8,9 @@ on:
         type: boolean
         default: true
       release_tag:
-        description: 'Release Tag name (if publishing release)'
+        description: 'Release tag (if publishing a release). Empty: v<app version>. Keep it a plain version: the in-app updater skips tags with a suffix like -custom.'
         type: string
-        default: 'v2.41.0-custom'
+        default: ''
   push:
     tags:
       - 'v*'
@@ -60,25 +60,57 @@ jobs:
           # 3. Generate DMG window background image
           swift packaging/dmg/background.swift apps/desktop/build/dmg-background.tiff
 
+      # GitHub's release downloads answer 504 now and then. Fetch what the build downloads first, retrying, so the
+      # build itself finds it cached: the Screen helper's Swift packages (WebRTC) and the computer-use driver.
+      - name: Prefetch downloads (retrying)
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8; do
+            xcodebuild -resolvePackageDependencies -project apps/Codync.xcodeproj -scheme Screen -derivedDataPath build/dd && break
+            [ "$attempt" = 8 ] && exit 1
+            echo "Swift packages didn't resolve; trying again"; sleep $((attempt * 30))
+          done
+          node packaging/cua-driver/fetch.mjs darwin "$RUNNER_TEMP/cua-driver"
+
       - name: Build and Package DMG
         working-directory: apps/desktop
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
           npm ci
           npm run icons
-          # Build universal DMG with ad-hoc signature, disabling notarization and auto-publish
-          npm run dist:mac:main -- -c.mac.notarize=false --publish never
+          # Universal DMG signed ad hoc (identity "-"): no Apple certificate, but a valid signature, which macOS needs to
+          # register Codync Screen's launch agent. Ad hoc needs hardened runtime off (Electron's frameworks carry another
+          # team ID). No notarization, no auto-publish.
+          # The steps of `npm run dist:mac:main`, with electron-builder retried: its downloads from GitHub releases
+          # (Electron, its checksums, packaging tools) answer 504 now and then, and what one try fetched stays cached.
+          node tools/account-config.mjs main
+          node tools/native-host.mjs main
+          node tools/native-screen.mjs main
+          npx electron-vite build
+          for attempt in 1 2 3 4 5; do
+            # From the third try, download Electron and electron-builder's tools from npmmirror instead of GitHub.
+            # Electron is still checked against the checksums the npm `electron` package ships (tools/electron-download.cjs).
+            if [ "$attempt" -ge 3 ]; then
+              export ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_CUSTOM_DIR='{{ version }}'
+              export ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
+            fi
+            npx electron-builder --mac --config tools/main-builder.cjs -c.mac.identity=- -c.mac.hardenedRuntime=false -c.mac.notarize=false --publish never && break
+            [ "$attempt" = 5 ] && exit 1
+            echo "electron-builder failed; trying again"; rm -rf dist; sleep $((attempt * 60))
+          done
 
       - name: Generate Homebrew Cask formula
         run: |
           TAG="${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
-          CLEAN_VERSION="${TAG#v}"
+          [ -n "$TAG" ] || TAG="v$(node -p "require('./apps/desktop/package.json').version")"
+          # A tag names the version (v2.41.0-custom → 2.41.0-custom); a branch build uses the app's own.
+          case "$TAG" in
+            v*) CLEAN_VERSION="${TAG#v}" ;;
+            *) CLEAN_VERSION=$(node -p "require('./apps/desktop/package.json').version") ;;
+          esac
           cd apps/desktop/dist
           SHA=$(shasum -a 256 codync-macos.dmg | awk '{print $1}')
           echo "$SHA  codync-macos.dmg" > codync-macos.dmg.sha256
-          sed -e "s/0.0.0/$CLEAN_VERSION/g" \
-              -e "s/REPLACE_WITH_SHA256/$SHA/g" \
+          sed -e "s|0\.0\.0|$CLEAN_VERSION|g" \
+              -e "s|REPLACE_WITH_SHA256|$SHA|g" \
               -e "s|leepokai/Codync|${{ github.repository }}|g" \
               ../../../packaging/homebrew/codync.rb > codync.rb
 
@@ -89,6 +121,9 @@ jobs:
           path: |
             apps/desktop/dist/codync-macos.dmg
             apps/desktop/dist/codync-macos.dmg.sha256
+            apps/desktop/dist/codync-macos.zip
+            apps/desktop/dist/codync-macos.zip.blockmap
+            apps/desktop/dist/latest-mac.yml
             apps/desktop/dist/codync.rb
           if-no-files-found: error
 
@@ -98,8 +133,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
+          [ -n "$TAG" ] || TAG="v$(node -p "require('./apps/desktop/package.json').version")"
           cd apps/desktop/dist
-          gh release create "$TAG" codync-macos.dmg codync-macos.dmg.sha256 codync.rb \
-            --title "Codync Custom ($TAG)" \
-            --notes "Custom build generated by GitHub Actions for commit ${{ github.sha }}." \
-            --clobber
+          # The zip and latest-mac.yml are the app's update feed (electron-updater reads them from the latest release).
+          FILES=(codync-macos.dmg codync-macos.dmg.sha256 codync-macos.zip codync-macos.zip.blockmap latest-mac.yml codync.rb)
+          # `gh release create` has no --clobber: re-running with the same tag replaces the files
+          # of the existing release instead.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+          else
+            gh release create "$TAG" "${FILES[@]}" \
+              --target "${{ github.sha }}" \
+              --title "Codync Custom ($TAG)" \
+              --notes "Custom build generated by GitHub Actions for commit ${{ github.sha }}."
+          fi

@@ -96,10 +96,28 @@ public struct Usage: Codable, Hashable, Sendable {
     public var providers: [UsageProvider]
     /// The agents the Usage screen can show or hide. Absent from a host older than the chooser.
     public var services: [UsageService]?
-    public init(providers: [UsageProvider] = [], services: [UsageService]? = nil) {
+    /// Each agent's tightest limit left, by every name a bot's `backend` may give it (`host/src/usage/stamina.rs`).
+    /// Absent from a host before it.
+    public var stamina: [String: Stamina]?
+    public init(providers: [UsageProvider] = [], services: [UsageService]? = nil, stamina: [String: Stamina]? = nil) {
         self.providers = providers
         self.services = services
+        self.stamina = stamina
     }
+}
+
+/// How much of a bot's agent's plan is left: the game-style bar under the bot's avatar in the roster.
+public struct Stamina: Codable, Hashable, Sendable {
+    /// Share of the tightest limit left, 0–100.
+    public var left: Int
+    public var label: String
+    public var resetsAt: Int64?
+    public var resetsText: String?
+
+    public enum Level: Sendable { case full, low, out }
+
+    /// The bar's color: full, under half, nearly out.
+    public var level: Level { left >= 50 ? .full : left >= 20 ? .low : .out }
 }
 
 /// An agent the Usage screen can show or hide. The host keeps the choice, so every app follows it.
@@ -262,8 +280,10 @@ public struct Hello: Codable, Sendable {
     public var canUpdate: Bool?
     /// The latest release the computer found; nil while unknown (development builds, older hosts).
     public var latestVersion: String?
-    /// This phone paired without the computer joining its account: it calls `joinAccount` to finish (older hosts: nil).
-    public var joinAccount: Bool?
+    /// The computer could join an account: a signed-in phone may offer to add it (`HostClient.joinAccount`).
+    public var canJoinAccount: Bool?
+    /// A bot with a new message moves to the top of the roster (missing from older hosts).
+    public var autoOrder: Bool?
 }
 
 public struct RecentWorkspace: Codable, Sendable, Identifiable {
@@ -346,6 +366,8 @@ public struct BotDraft: Codable, Hashable, Sendable {
     public var sharedMemory: Bool?
     /// Only sent when the user changes it.
     public var harnessMemory: Bool?
+    /// Nil where the host offers no setting (a new bot, an agent it can't ask), so it isn't sent.
+    public var compaction: CompactionThreshold?
 
     public init(name: String = "", description: String = "", avatarColor: String = AvatarPalette.colors.randomElement()!.id,
                 avatarShape: String = AvatarPalette.shapes.randomElement()!, backend: String = "claude", cwd: String = "",
@@ -385,6 +407,7 @@ public struct BotDraft: Codable, Hashable, Sendable {
         manageTeam = bot.manageTeam
         offeredToNetwork = bot.offeredToNetwork
         reachableByAssistants = bot.reachableByAssistants
+        compaction = bot.compaction
     }
 
     /// This draft with each field it hasn't changed from `base` (the bot as the form loaded it) taken from `fresh`
@@ -400,6 +423,7 @@ public struct BotDraft: Codable, Hashable, Sendable {
         follow(\.fastMode); follow(\.fallbacks); follow(\.selfFallbacks); follow(\.pinned); follow(\.hidden)
         follow(\.notify); follow(\.connectors); follow(\.skills); follow(\.computer); follow(\.manageTeam)
         follow(\.sharedMemory); follow(\.harnessMemory); follow(\.offeredToNetwork); follow(\.reachableByAssistants)
+        follow(\.compaction)
         return draft
     }
 }

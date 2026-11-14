@@ -5,10 +5,10 @@ use std::collections::BTreeMap;
 use std::time::Instant;
 
 use super::super::manage::{
-    AgentSetup, AnalyticsSheet, BotChatSheet, DevServersSheet, Fields, Gear, Library, Market, MemorySheet,
+    AgentSetup, AnalyticsSheet, BoardSheet, BotChatSheet, DevServersSheet, Fields, Gear, Library, Market, MemorySheet,
     NetworkSheet, RoutineForm, RoutineList, SkillSheet,
 };
-use super::{Editor, Mark};
+use super::{Editor, Mark, WhatsNew};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Focus {
@@ -53,6 +53,7 @@ pub enum Action {
     Memory,
     Details,
     Library,
+    Board,
     RefreshAgents,
     Pair,
     Network,
@@ -60,20 +61,25 @@ pub enum Action {
     CheckUpdate,
     Analytics,
     AboutAnalytics,
+    AutoOrder,
     Language,
     ThinkingDetails,
+    /// Several bots at once: agent-desktop instead of the default driver for computer use.
+    ComputerDriver,
     Keys,
     Appearance(super::super::appearance::Appearance),
 }
 
-pub const ACTIONS: [(&str, &str, Action); 19] = [
+pub const ACTIONS: [(&str, &str, Action); 22] = [
     ("New bot…", "n", Action::NewBot),
     ("New group chat…", "m", Action::NewGroup),
     ("Extensions: agents, connectors, skills…", "A", Action::Market),
     ("Memory of this bot…", "M", Action::Memory),
     ("Details of this bot…", "R", Action::Details),
     ("Library of this bot: artifacts and files…", "L", Action::Library),
+    ("Team board: tasks your bots share…", "B", Action::Board),
     ("Refresh agents", "", Action::RefreshAgents),
+    ("Move active bots to the top", "", Action::AutoOrder),
     ("Pair a phone…", "P", Action::Pair),
     ("Network: your other computers…", "N", Action::Network),
     ("Usage", "U", Action::Usage),
@@ -85,6 +91,7 @@ pub const ACTIONS: [(&str, &str, Action); 19] = [
     ("Appearance: Dark", "", Action::Appearance(super::super::appearance::Appearance::Dark)),
     ("App language…", "", Action::Language),
     ("Show thinking details", "", Action::ThinkingDetails),
+    ("Several bots at once", "", Action::ComputerDriver),
     ("Keys", "?", Action::Keys),
 ];
 
@@ -179,6 +186,7 @@ pub enum Field {
     SelfFallbacks,
     Folder,
     Approvals,
+    Compaction,
     Notify,
     Computer,
     Team,
@@ -190,7 +198,7 @@ pub enum Field {
     Skills,
 }
 
-pub const FIELDS: [Field; 19] = [
+pub const FIELDS: [Field; 20] = [
     Field::Name,
     Field::Instructions,
     Field::Agent,
@@ -199,6 +207,7 @@ pub const FIELDS: [Field; 19] = [
     Field::Fast,
     Field::Fallbacks,
     Field::SelfFallbacks,
+    Field::Compaction,
     Field::Folder,
     Field::Approvals,
     Field::Notify,
@@ -242,6 +251,12 @@ pub struct Form {
     /// `None`: the host has no per-bot network switches.
     pub offered_to_network: Option<bool>,
     pub reachable_by_assistants: Option<bool>,
+    /// `None`: Codync doesn't summarize this agent's chats.
+    pub compaction: Option<codync_mem::compaction::Threshold>,
+    /// `None` until the agent has told its window.
+    pub compaction_sizes: Option<codync_mem::compaction::Sizes>,
+    /// The digits of a size being typed, in thousands of tokens.
+    pub compaction_typed: String,
     pub color: usize,
     pub shape: usize,
     pub connectors: Vec<Toggle>,
@@ -311,8 +326,13 @@ pub struct GroupForm {
 /// The pair-a-phone sheet's code: on its way, shown (its pairing link, and the short code to type when the
 /// Codync cloud holds one), or why none came.
 pub enum PairCode {
+    /// Opened for a phone asking: only the question shows, and no code is issued, which would wake the relay.
+    QuestionOnly,
     Loading,
-    Ready { url: String, short_code: Option<String> },
+    Ready {
+        url: String,
+        short_code: Option<String>,
+    },
     Failed(String),
 }
 
@@ -341,7 +361,10 @@ pub enum Overlay {
     DevServers(DevServersSheet),
     Routines(RoutineList),
     Routine(Box<RoutineForm>),
+    /// A bot's Computer page, by the bot's id.
+    Computer(String),
     Library(Library),
+    Board(BoardSheet),
     Gear(Gear),
     Market(Box<Market>),
     Agent(AgentSetup),
@@ -349,6 +372,7 @@ pub enum Overlay {
     Skill(SkillSheet),
     Analytics(AnalyticsSheet),
     Network(Box<NetworkSheet>),
+    WhatsNew(WhatsNew),
 }
 
 pub struct Toast {

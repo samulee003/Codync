@@ -4,11 +4,13 @@ import { isSSHConnecting, showsChat as shouldShowChat } from '@shared/ssh-startu
 import { draftOf, type Bot, type BotDraft } from '@shared/models'
 import { CharacterAvatar } from '../components/Avatar'
 import { Button, IconButton, ResizeHandle } from '../components/Controls'
-import { AnchoredMenu, Dialog, ModalHeader, Sheet, type MenuItem } from '../components/Overlay'
+import { Dialog, ModalHeader, Sheet } from '../components/Overlay'
+import { AnchoredMenu, type MenuItem } from '../components/Menu'
 import { HStack, Spacer } from '../components/Stack'
 import { Text } from '../components/Text'
 import { useModels } from '../lib/observable'
 import { prefs, stepTextSize, usePref, DEFAULT_TEXT_SIZE } from '../lib/prefs'
+import { limitSectionName, sectionName } from '../lib/roster-sections'
 import { useApp, StoreContext } from '../store/context'
 import { analytics } from '../store/analytics'
 import { refKey, sameRef, parseRef } from '../store/app-model'
@@ -25,9 +27,13 @@ import { NewBotView, NewGroupView } from './bots/NewBotView'
 import { ImportBotsSheet } from './bots/ImportBotsView'
 import { BotEditorView } from './bots/BotEditorView'
 import { MarketplaceView } from './marketplace/MarketplaceView'
+import { useBoardSheet } from './board/BoardSheet'
+import { ScreenViewer } from './screen/ScreenViewer'
 import { SignInCodeDialog } from './marketplace/ConnectorSheets'
 import { SettingsView, type SettingsPage } from './settings/SettingsView'
 import { ApprovalSheet } from './settings/ApprovalSheet'
+import { FindBar } from './FindBar'
+import { useFindBar } from './use-conversation-find'
 import { SearchPalette } from './SearchPalette'
 import { AccountWelcomeView, useWelcomeGate } from './AccountWelcomeView'
 import { ComputerAccessView } from './computer-access/ComputerAccessView'
@@ -36,19 +42,18 @@ import { HostStateView } from './HostStateView'
 import { StartupRecovery } from './StartupRecovery'
 export { EmptyState } from './HostStateView'
 import { RefreshIndicator } from './RefreshIndicator'
-import { StarPrompt } from './StarPrompt'
-import { MoveComputerPrompt } from './MoveComputerPrompt'
+import { MainPrompts } from './MainPrompts'
 import { PairingRequestPrompt } from './PairingRequestPrompt'
-import { DeleteAccountPrompt } from './DeleteAccountPrompt'
 import { OpenVoiceSettings } from './call/CallView'
 import { AccountPanelLayer, ProfileAvatar } from './PanelMenus'
-import { DesktopActionMenu, type ActionItem } from './DesktopActionMenu'
-import { moveToSectionItems, sectionHeaderItems, type SectionNaming } from './section-menus'
+import { DesktopActionMenu } from './DesktopActionMenu'
+import { moveToSectionItems, sectionHeaderItems } from './section-menus'
 import { makeLeadItems, offersDelete, voiceTarget } from './lead-menus'
-import { SectionNameDialog } from './SectionNameDialog'
+import { NameDialog, type Naming } from './NameDialog'
 import { useTraySummary } from './tray-summary'
 import { useIslandSummary } from './island-summary'
 import { useSSH, useSSHAttachments } from './settings/ssh-model'
+import { useCloudAttachments } from '../store/cloud-attachments'
 import './chat-window.css'
 import './sidebar-header.css'
 import { useTr } from '../lib/use-language'
@@ -64,6 +69,7 @@ export function ChatWindow() {
   const [confirmReset, setConfirmReset] = useState(false)
   const [upToDate, setUpToDate] = useState(false)
   useSSHAttachments(app)
+  useCloudAttachments(app)
   const ssh = useSSH()
   const showsChat = shouldShowChat(app.host.state.kind, app.computers.length, ssh.state)
   const finishAccess = (ready: boolean, onboarding: boolean) => {
@@ -128,7 +134,7 @@ export function ChatWindow() {
       <RefreshIndicator />
       {!welcome.shown ? (
         accessSetup === null ? (
-          <AccessOnboarding onContinue={(ready) => finishAccess(ready, true)} />
+          <AccessOnboarding onContinue={(ready) => finishAccess(ready, true)} onBack={welcome.back} />
         ) : showsChat ? (
           <ChatSplitView />
         ) : (
@@ -138,7 +144,7 @@ export function ChatWindow() {
         <AccountWelcomeView onContinue={welcome.finish} />
       )}
       {!welcome.shown && accessSetup !== null && showsChat ? null : <div className="window-drag drag" />}
-      {!welcome.shown && accessSetup !== null ? <><StarPrompt /><MoveComputerPrompt /><DeleteAccountPrompt /></> : null}
+      <MainPrompts ready={!welcome.shown && accessSetup !== null} />
       <Sheet open={showAccess} onClose={() => setShowAccess(false)} width={660} height={Math.min(820, window.innerHeight - 80)}>
         <ModalHeader icon="hand.raised" title={tr(`Computer access`)} />
         <ComputerAccessView onContinue={(ready) => { finishAccess(ready, false); setShowAccess(false) }} />
@@ -201,12 +207,14 @@ function ChatSplitView() {
   const [sidebarWidth, setSidebarWidth] = usePref(prefs.sidebarWidth)
   const [hidden, setHidden] = usePref(prefs.hiddenComputers)
   const [searching, setSearching] = useState(false)
+  // Find in the open conversation (⌘F).
+  const find = useFindBar(app.selection ? refKey(app.selection) : null)
   const [creating, setCreating] = useState<CreateTarget | null>(null)
   const [importing, setImporting] = useState(false)
   const [newMenu, setNewMenu] = useState(false)
   const [railNewMenu, setRailNewMenu] = useState(false)
-  const [context, setContext] = useState<{ items: ActionItem[]; x: number; y: number } | null>(null)
-  const [naming, setNaming] = useState<SectionNaming | null>(null)
+  const [context, setContext] = useState<{ items: MenuItem[]; x: number; y: number } | null>(null)
+  const [naming, setNaming] = useState<Naming | null>(null)
   const [editing, setEditing] = useState<EditTarget | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<BotTarget | null>(null)
   const [marketplace, setMarketplace] = useState<string | null>(null)
@@ -233,6 +241,7 @@ function ChatSplitView() {
   const shown = new Set(computerSelection(app.computers.map((c) => c.id), hidden).shown)
   const onlineStores = stores.filter((s) => shown.has(s.computer.id) && s.connection.kind === 'online' && !s.mismatch)
   const selectedStore = app.selectedStore
+  const screenStore = app.screenComputer ? (app.store(app.screenComputer) ?? null) : null
   const createStore = creating ? app.store(creating.computerId) : null
   const localOnline = !!app.local && onlineStores.includes(app.local)
   const roster = useComputerRoster(app, shown)
@@ -252,6 +261,8 @@ function ChatSplitView() {
       window.codync.app.onCommand((c) => {
         if (c.kind === 'newBot' && onlineStores.length) create('bot')
         if (c.kind === 'search') setSearching(true)
+        // Without a conversation open there is nothing to find in: ⌘F searches the bots instead.
+        if (c.kind === 'find') app.selection ? find.open() : setSearching(true)
         if (c.kind === 'networkSettings') setSettings('network')
         if (c.kind === 'toggleSidebar') setCompact(!prefs.sidebarCompact.get())
         if (c.kind === 'voiceKey') {
@@ -296,9 +307,10 @@ function ChatSplitView() {
   ]
 
   const openMarketplace = () => setMarketplace((selectedStore ?? app.local ?? onlineStores[0])?.computer.id ?? null)
+  const board = useBoardSheet(app, selectedStore, onlineStores, { width: windowSize.width, height: sheetHeight })
 
   // One plain list. The lead stays in sight: no hide.
-  const botActions = (bot: Bot, store: BotStore): ActionItem[] => [
+  const botActions = (bot: Bot, store: BotStore): MenuItem[] => [
     { title: bot.pinned ? 'Unpin' : 'Pin', icon: 'pin', action: () => store.setPinned(bot, !bot.pinned) },
     ...moveToSectionItems(bot, store, setNaming),
     { title: 'Mark as Read', icon: 'bell.badge', action: () => store.markAllRead(bot.id) },
@@ -353,7 +365,7 @@ function ChatSplitView() {
     detail = (
       <div className="empty-detail">
         <div className="detail-drag drag" />
-        <HStack align="stretch" className="empty-detail-crew">
+        <HStack align="stretch" gap={12}>
           <CharacterAvatar shape="blob" color="blue" size={60} mood="working" />
           <CharacterAvatar shape="squircle" color="orange" size={60} />
           <CharacterAvatar shape="teardrop" color="violet" size={60} mood="working" />
@@ -376,6 +388,7 @@ function ChatSplitView() {
           <HStack gap={6} className="no-drag">
             <ComputerFilterHeader hidden={hidden} setHidden={setHidden} manage={() => setSettings('computers')} compact />
             <IconButton title="Search" icon="magnifyingglass" size={32} className="sidebar-header-action" onClick={() => setSearching(true)} />
+            {board.open ? <IconButton title="Team board" icon="checklist" size={32} className="sidebar-header-action" onClick={board.open} /> : null}
             <IconButton title="New" icon="plus" size={32} className="sidebar-header-action" buttonRef={newButton} menuOpen={newMenu} onClick={() => setNewMenu((o) => !o)} disabled={!onlineStores.length} />
           </HStack>
           <AnchoredMenu open={newMenu} onClose={() => setNewMenu(false)} anchor={newButton} items={newItems} />
@@ -410,24 +423,26 @@ function ChatSplitView() {
         {compact ? (
           <div className="rail-actions">
             <IconButton title="Search" icon="magnifyingglass" onClick={() => setSearching(true)} />
+            {board.open ? <IconButton title="Team board" icon="checklist" onClick={board.open} /> : null}
             <IconButton title="New" icon="plus" size={36} buttonRef={railNewButton} menuOpen={railNewMenu} disabled={!onlineStores.length} onClick={() => setRailNewMenu((o) => !o)} />
             <AnchoredMenu open={railNewMenu} onClose={() => setRailNewMenu(false)} anchor={railNewButton} items={newItems} />
             <IconButton title="Extensions" icon="square.grid.2x2" size={36} onClick={openMarketplace} />
             <UpdateBadge size={32} />
-            <RailAccountNotice onComputers={() => setSettings('computers')} />
+            <RailAccountNotice />
             <button className={`rail-profile ${showAccount ? 'open' : ''}`} aria-label="Open account menu for Account" title="Account" onClick={() => setShowAccount((s) => !s)}>
               <ProfileAvatar />
             </button>
           </div>
         ) : (
           // With several computers each heading opens its own Extensions instead.
-          <SidebarFooter accountOpen={showAccount} onAccount={() => setShowAccount((s) => !s)} onExtensions={roster.grouped ? undefined : openMarketplace} onComputers={() => setSettings('computers')} />
+          <SidebarFooter accountOpen={showAccount} onAccount={() => setShowAccount((s) => !s)} onExtensions={roster.grouped ? undefined : openMarketplace} />
         )}
       </aside>
       <ResizeHandle label={tr('Resize sidebar')} width={width} min={76} max={sidebarMax} edge="trailing" onResize={resizeSidebar} onDragging={setResizing} />
       <main className="detail">
         {/* The call bar's settings open this window's Settings at Voice chat. */}
         <OpenVoiceSettings.Provider value={openVoiceSettings}>{detail}</OpenVoiceSettings.Provider>
+        {find.focus !== null && selectedBot ? <FindBar focusKey={find.focus} onClose={find.close} /> : null}
       </main>
 
       {showAccount ? (
@@ -480,8 +495,12 @@ function ChatSplitView() {
           </StoreContext.Provider>
         ) : null}
       </Sheet>
+      {board.sheet}
       <Sheet open={settings !== null} onClose={() => setSettings(null)} width={Math.min(800, windowSize.width - 80)} height={Math.min(620, sheetHeight)}>
         {settings ? <SettingsView page={settings} setPage={setSettings} /> : null}
+      </Sheet>
+      <Sheet open={screenStore !== null} onClose={() => app.openScreen(null)} width={windowSize.width - 48} height={sheetHeight}>
+        {screenStore ? <ScreenViewer key={screenStore.computer.id} store={screenStore} watching={app.screenWatching} /> : null}
       </Sheet>
       <Dialog
         open={confirmDelete !== null}
@@ -490,7 +509,7 @@ function ChatSplitView() {
         actions={confirmDelete ? [{ title: 'Delete bot and its conversation', destructive: true, action: () => confirmDelete.store.delete(confirmDelete.bot) }] : []}
         onClose={() => setConfirmDelete(null)}
       />
-      <SectionNameDialog naming={naming} onClose={() => setNaming(null)} />
+      <NameDialog naming={naming} placeholder="Section name" limit={limitSectionName} clean={sectionName} onClose={() => setNaming(null)} />
       <Dialog open={errorMessage !== null} title={tr('Something went wrong')} message={errorMessage} actions={[]} cancel="OK" onClose={() => app.clearErrors()} />
       <SignInCodeDialog />
     </div>

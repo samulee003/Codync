@@ -54,3 +54,13 @@
   .computer-access h1 { font-size: calc(24px * var(--scale)); }
 }
 @media (prefers-reduced-motion: reduce) { .computer-access { animation: none; } }
+
+/* Settings only: the driver choice under the permission steps, outlined like them. */
+.computer-access-driver { margin-top: 16px; border: 1px solid var(--stroke-strong); border-radius: var(--radius-l); padding: 14px 18px; }
+.computer-access-driver .switch { width: 100%; justify-content: space-between; gap: 16px; text-align: left; }
+.computer-access-driver-text { display: grid; gap: 3px; }
+.computer-access-driver-text strong { font-size: var(--text-body); font-weight: 500; color: var(--text); }
+.computer-access-driver-text span { font-size: var(--text-caption); color: var(--secondary); }
+.computer-access-driver-note { display: flex; align-items: flex-start; gap: 6px; margin-top: 10px; font-size: var(--text-caption); color: var(--secondary); user-select: text; }
+.computer-access-driver-note > :first-child { margin-top: 2px; flex: none; color: var(--attention); }
+

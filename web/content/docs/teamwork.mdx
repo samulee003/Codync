@@ -80,7 +80,7 @@ Once your computers are in the network, nothing else changes for your bots. A bo
 
 - **Away computers:** a request to a computer that's asleep waits up to a day and goes out when it's back.
 - **Limits:** besides the limits below, each computer accepts a burst of 5 messages between the same two bots, then one every 2 minutes, and refuses the same words twice within 10 minutes.
-- **Connector:** each network has its own. When you create or join, **When there's no direct path** picks how computers reach each other: **Public relays** (iroh's, meant for trying things out; the default), **Your own relay** (an `iroh-relay` you run) or **Private: direct only** (computers on the same network, Tailscale or a VPN). On the command line: `--connector public|private|https://your-relay`.
+- **Connector:** each network has its own. When you create or join, **When there's no direct path** picks how computers reach each other: **Public relays** (iroh's, meant for trying things out; the default), **Your own relay** (an `iroh-relay` you run) or **Private: direct only** (computers on the same network, Tailscale or a VPN). On the command line: `--connector public|private|https://your-relay`. A Windows computer needs no firewall change: it keeps its own connection to the others open, and they write to it over that.
 
 ### Choose who reaches your bots
 
@@ -146,4 +146,37 @@ A manager can't:
 Each bot runs only its own routines. A manager can create or replace a teammate's routines, but to test one, it asks that bot to run it. The run then belongs to the owner: it uses the owner's setup, and its result appears in the owner's chat.
 
 A hidden bot can't be messaged, so to test a hidden bot's routine, run it yourself with **Test run** in that bot's routine list.
+
+## The team board
+
+For a bigger job, split it into tasks on the **team board**, the checklist button next to the bot list (in the terminal, press `B`). Each computer has one board that you and its bots share.
+
+- **Add tasks** yourself with **+**. To pick a project folder, tap the folder field and choose it as you would a bot's workspace. Your lead bot plans each task you add, sizing it first and noting its call on the task: a small job (one bot, minutes) it does itself or leaves for the bot that fits it best, since a team only adds turns and checks; a large job with independent parts it splits into subtasks for the team.
+- **Write a work order.** When you add a task, list its **acceptance criteria**, one per line: what must hold for the work to count as done. With **Approve the plan before work starts** on (the default), the bot first sends you its plan and waits: it shows under **Waiting for you** at the top of the board, and you get a notification. Pick **Approve plan**, or write what to change and pick **Ask for changes**; until you approve, no work starts. In the terminal UI, press `y` to approve, `r` to ask for changes.
+- **The bot may ask first.** Before it plans, a bot can ask you up to three questions about the task. They show under **Waiting for you**; type an answer to each, and the bot plans with them. In the terminal UI, press `i` to answer.
+- **A stuck task comes back.** If a claimed task sits untouched for 20 minutes, its bot is asked once to carry on or let it go. If it still doesn't move, the task goes back to the board for another bot.
+- **A bot learns from checks.** When a checker sends a bot's work back, the bot keeps what the checker said and avoids the same mistake on later tasks.
+- **Templates (desktop app).** Use **Save as template** in a task's menu to keep a task that went well. When you add a new task, pick a saved one from the **Template** chooser to fill in its title, detail, criteria, project and the **Approve the plan before work starts** switch.
+- **Effort.** On the desktop app and in the terminal UI, a task that a bot has worked on shows the turns and minutes it took, such as "3 turns · 12 min".
+- **Split a whole goal** with the wand button: your lead bot breaks it into subtasks on the board, for example "Prepare both kids' exam review papers".
+- **Parts start in order.** When one part builds on another, the lead marks it to wait: it shows **Waits for …** and who it's for, and starts on its own the moment the parts before it are finished.
+- **The lead coordinates.** A subtask shows the task it belongs to (↳). When all the parts are finished, the lead is told, checks them and puts the result together.
+- **Bots claim tasks on their own.** While a bot is idle, it hears about the open tasks in its own chat and takes one that fits it better than its teammates; no other bot can take a task while one holds it, and a bot holds at most three at once. Every bot takes part unless you turn it off under **Bots that claim tasks on their own** at the bottom of the board. To hand a task to a particular bot instead, open the task's menu and pick **Assign to**: the bot starts on it in its own chat.
+- **Another bot checks the work.** A finished task moves to **Being checked**, and another bot looks at the result. It marks every acceptance criterion passed (✓) or failed (✗), with what it saw, and one failed criterion sends the task back with what to fix (you see this as a note); the bot that did it fixes it. After two rounds, the task comes to you to decide.
+- **Each job starts fresh.** A bot handed a new job begins it with a clear head, so an earlier task doesn't steer it; parts of the same goal keep what it knows. Your chat with the bot stays as it was.
+- **Notes** on a task are shared: bots add what they found or decided, and you can add your own.
+- **Each task in a git project gets its own copy.** When a bot claims a task in a git repository, it works in a separate worktree on a branch of its own, `codync/task-…`, so bots working in the same project at once never edit the same files. A bot must commit its work before it can finish the task.
+- **You merge.** A finished task with a branch waits under **Ready to merge**. Pick **Merge branch** to merge it into the project's current branch. If the project has uncommitted changes or the branch doesn't merge cleanly, nothing changes and you're told why: reopen the task and ask its bot to bring its branch up to date. Cancelling or deleting a task keeps its branch, so no work is lost.
+
+### Character sheets (desktop app)
+
+Open a bot's details to see its **Character** card, laid out like a unit in a tactics game:
+
+- **Class**: Strategist (plans and splits work), Ruler (leads, coordinates and assembles), Commander (builds code and systems), Infantry (steady, well-defined tasks) or Martial Artist (checks finished work). Pick it on the card, or when you create the bot. The class tells teammates what the bot is for, and a Martial Artist is asked first to check finished work.
+- **Promotion**: at Lv 5 and Lv 10 the class is promoted to a higher title (a Commander becomes a High Commander, then a Grand Commander) and every ability goes up.
+- **Level and experience**: earned on the team board by finishing tasks, getting them accepted the first time, checking others' work and planning subtasks.
+- **Stamina**: how much of the agent's plan is left, the same bar as under the avatar.
+- **Abilities**: Might, Intellect, Leadership, Accuracy and Insight. The class sets where they start, and they grow with what the bot actually does.
+
+The board pairs well with [computer use](/docs/computer-use): when several bots use the computer at once, give each its own task so they don't drive the same app.
 

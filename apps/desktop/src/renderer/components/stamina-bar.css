@@ -1,0 +1,18 @@
+/* A bot's stamina: a thin capsule under its avatar, filled by what is left of its agent's plan. */
+.stamina-bar {
+  display: block;
+  height: 4px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: rgba(var(--text-rgb), 0.12);
+  overflow: hidden;
+}
+.stamina-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  transition: width var(--fade);
+}
+.stamina-bar.full .stamina-fill { background: var(--added); }
+.stamina-bar.low .stamina-fill { background: var(--warning); }
+.stamina-bar.out .stamina-fill { background: var(--danger); }

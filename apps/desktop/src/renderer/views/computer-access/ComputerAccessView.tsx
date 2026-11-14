@@ -5,6 +5,7 @@ import { useTr } from '../../lib/use-language'
 import { useScreenViewed } from '../../store/analytics'
 import { useComputerAccess } from './use-computer-access'
 import { AccessSteps } from './AccessSteps'
+import { DriverSwitch } from './DriverSwitch'
 import appIcon from '../../../../resources/icon.png'
 import './computer-access.css'
 
@@ -44,6 +45,8 @@ export function ComputerAccessView({ onContinue }: { onContinue?: (ready: boolea
           <span>{ready ? tr('All set') : tr('{done} of {total} ready').replace('{done}', String(completed)).replace('{total}', String(mac ? 3 : windows ? 1 : 2))}<IconButton title="Check again" icon="arrow.clockwise" size={22} onClick={() => void access.refresh()} /></span>
         </div>
         <div className="computer-access-steps"><AccessSteps access={access} /></div>
+        {/* A choice, not a setup step: Settings only. */}
+        {onContinue ? null : <DriverSwitch access={access} />}
         <ul className="computer-access-notes">
           <li><Icon name="lock.shield" size={13} /><p>{tr(onContinue ? 'Permissions stay on this computer. You can change them later in Settings → Computer access.' : 'Permissions stay on this computer. Your other computers keep their own permissions.')}</p></li>
           <li><Icon name="iphone" size={13} /><p>{tr('On iPhone, connect with a QR code or Ask Access. No SSH setup needed.')}</p></li>

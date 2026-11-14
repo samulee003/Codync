@@ -1,6 +1,7 @@
 import type { CallError } from '@shared/ipc'
 import { isChat, isReplyable, normalizeBot, quoteOf, type Bot, type BotDraft, type Entry, type GroupDraft } from '@shared/models'
 import * as story from './story'
+import type { BotSheet } from '@shared/sheet'
 
 // An in-memory codync-host for the website demo: the methods the renderer calls, with the
 // host's JSON shapes (host/src/api/), and the events stream (hello, then catch-up in rev
@@ -11,10 +12,10 @@ const TYPING_MS = 1500
 export const DEMO_UNAVAILABLE = 'Not available in the web demo. Install Codync to use this.'
 
 export class FakeHost {
-  readonly hostId = 'demo-host'
   private rev = 0
   private seq = 0
   private bots = new Map<string, Bot>()
+  private sheets = story.sheets
   private entries: Entry[] = []
   private listeners = new Set<(line: string) => void>()
   private turns = new Map<string, number>()
@@ -24,16 +25,21 @@ export class FakeHost {
 
   constructor(
     readonly version: string,
+    private readonly computer: story.DemoComputer,
     now = Date.now(),
   ) {
-    for (const b of story.bots) {
+    for (const b of computer.bots) {
       this.bots.set(b.id, normalizeBot({ ...b, cwd: b.kind === 'group' ? '' : story.cwd, createdAt: now - 86_400_000, permission: b.permission ?? 'auto' }))
     }
-    for (const s of story.entries) this.add({ botId: s.botId, kind: s.kind, data: s.data }, s.id, now - s.at * 60_000, false)
+    for (const s of computer.entries) this.add({ botId: s.botId, kind: s.kind, data: s.data }, s.id, now - s.at * 60_000, false)
     for (const b of this.bots.values()) {
       this.refreshPreview(b)
       b.rev = ++this.rev
     }
+  }
+
+  get hostId() {
+    return `${this.computer.id}-host`
   }
 
   // MARK: events
@@ -44,7 +50,7 @@ export class FakeHost {
       ...[...this.bots.values()].filter((b) => b.rev > since).map((b) => ({ rev: b.rev, line: { type: 'bot', rev: b.rev, bot: this.botJSON(b) } })),
       ...this.entries.filter((e) => e.rev > since).map((e) => ({ rev: e.rev, line: { type: 'entry', rev: e.rev, entry: e } })),
     ].sort((a, b) => a.rev - b.rev)
-    const hello = { type: 'hello', hostId: this.hostId, computerId: story.COMPUTER_ID, rev: this.rev, usage: story.usage(Date.now()), screen: null }
+    const hello = { type: 'hello', hostId: this.hostId, computerId: this.computer.id, rev: this.rev, usage: story.usage(Date.now()), screen: null }
     let open = true
     const listener = (line: string) => open && onData(line)
     setTimeout(() => {
@@ -142,7 +148,7 @@ export class FakeHost {
 
   private replyText(botId: string) {
     if (this.pending(botId)) return story.waitingReply
-    const pool = story.replies[botId] ?? ['Got it. I\'ll take a look and report back.']
+    const pool = this.computer.replies[botId] ?? ['Got it. I\'ll take a look and report back.']
     const i = this.nextReply.get(botId) ?? 0
     this.nextReply.set(botId, i + 1)
     return pool[i % pool.length]!
@@ -166,8 +172,8 @@ export class FakeHost {
     switch (method) {
       case 'hello':
         return {
-          hostId: this.hostId, computerId: story.COMPUTER_ID, signKey: '', boxKey: '', cloud: null, name: story.HOST_NAME,
-          version: this.version, minApp: this.version, os: 'macos', device: 'MacBookPro', home: '/Users/demo', rev: this.rev, analytics: this.analytics,
+          hostId: this.hostId, computerId: this.computer.id, signKey: '', boxKey: '', cloud: null, name: this.computer.name,
+          version: this.version, minApp: this.version, os: 'macos', device: this.computer.device, home: '/Users/demo', rev: this.rev, analytics: this.analytics,
           urls: [], backends: [
             { id: 'claude', name: 'Claude Code', available: true, installed: true, signedIn: true, command: 'claude', installHint: '' },
             { id: 'codex', name: 'Codex', available: true, installed: true, signedIn: true, command: 'codex', installHint: '' },
@@ -240,6 +246,14 @@ export class FakeHost {
         this.bots.delete(id)
         this.emit({ type: 'bot', rev: ++this.rev, bot: { id, rev: this.rev, deleted: true } })
         return {}
+      }
+      case 'botSheets':
+        return { sheets: this.sheets }
+      case 'setBotClass': {
+        const known = this.sheets.find((s) => s.botId === str('botId')) ?? { ...story.sheets[3]!, botId: str('botId') }
+        const sheet = { ...known, class: (b.class as BotSheet['class']) ?? null }
+        this.sheets = [...this.sheets.filter((s) => s.botId !== sheet.botId), sheet]
+        return { sheet }
       }
       case 'refreshBackends':
         return { backends: ((await this.call('hello', {})) as { backends: unknown }).backends }

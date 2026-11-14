@@ -130,6 +130,10 @@ fn bot_row(buf: &mut Buffer, row: Rect, app: &mut App, b: &Bot, bar: Option<Styl
     let tx = rput(buf, row.right() - 1, y, &time, if b.unread > 0 { t.bold } else { t.dim });
     let gx = tx.saturating_sub(2);
     put(buf, gx, y, 1, g, gs);
+    // Stamina sits under the avatar like a game character's: one cell that drains as the agent's plan is used.
+    if let Some((cell, style)) = stamina_cell(&app.usage, b) {
+        put(buf, x0 + 2, y + 1, 1, cell, style);
+    }
     // The badge sits below the avatar, leaving activity and unread indicators visible.
     if b.lead {
         put(buf, x0 + 3, y + 1, 1, "★", t.amber);
@@ -144,6 +148,26 @@ fn bot_row(buf: &mut Buffer, row: Rect, app: &mut App, b: &Bot, bar: Option<Styl
     if !badge.is_empty() {
         rput(buf, row.right() - 1, y + 1, &badge, t.btn_primary);
     }
+}
+
+/// The stamina cell's heights, from nearly out to full.
+const BLOCKS: [&str; 8] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+
+/// A bot's stamina as one cell, from the host's `usage.stamina` by its agent: a block whose height is what is left of
+/// the agent's tightest limit, green while plenty, amber under half, red under a fifth. Groups have none.
+fn stamina_cell(usage: &serde_json::Value, b: &Bot) -> Option<(&'static str, Style)> {
+    if b.group {
+        return None;
+    }
+    let left = usage["stamina"][b.backend.as_str()]["left"].as_u64()?;
+    let t = theme();
+    let style = match left {
+        50.. => t.green,
+        20..50 => t.amber,
+        _ => t.red,
+    };
+    let step = usize::try_from(left.min(100) * 7 / 100).unwrap_or(7);
+    Some((BLOCKS[step], style))
 }
 
 /// A one-line preview without Markdown punctuation: its first line (also how a reply's quote shows).
@@ -242,6 +266,21 @@ fn mark_cursor(buf: &mut Buffer, row: Rect, bar: Style) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stamina_is_one_cell_that_drains_and_changes_color() {
+        let bot = |backend: &str, kind: &str| {
+            Bot::parse(&serde_json::json!({"id": "b", "name": "B", "backend": backend, "kind": kind})).expect("a bot")
+        };
+        let usage = serde_json::json!({"stamina": {"codex": {"left": 33, "label": "Weekly"}, "claude": {"left": 100, "label": "5h"}}});
+        let t = theme();
+        assert_eq!(stamina_cell(&usage, &bot("codex", "agent")), Some(("▃", t.amber)));
+        assert_eq!(stamina_cell(&usage, &bot("claude", "agent")), Some(("█", t.green)));
+        assert_eq!(stamina_cell(&usage, &bot("gemini", "agent")), None, "no reading: no bar");
+        assert_eq!(stamina_cell(&usage, &bot("codex", "group")), None, "a group has no agent of its own");
+        let low = serde_json::json!({"stamina": {"codex": {"left": 5}}});
+        assert_eq!(stamina_cell(&low, &bot("codex", "agent")), Some(("▁", t.red)));
+    }
 
     #[test]
     fn a_long_section_name_gives_way_to_the_count_and_leaves_a_gap_before_the_badge() {

@@ -13,4 +13,5 @@ module.exports = {
   dmg: { ...base.dmg, ...dev.dmg },
   linux: { ...base.linux, ...dev.linux },
   win: { ...base.win, ...dev.win },
+  electronDownload: require('./electron-download.cjs'),
 }

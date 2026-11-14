@@ -68,8 +68,8 @@ static TOOLS: LazyLock<Vec<Value>> = LazyLock::new(|| {
     ]
 });
 
-/// Whether the user asked for this driver.
-pub(super) fn selected() -> bool {
+/// Whether the host's environment asks for this driver (`CODYNC_COMPUTER_DRIVER`), whatever the setting says.
+pub(super) fn forced() -> bool {
     std::env::var(DRIVER_ENV).is_ok_and(|v| v.eq_ignore_ascii_case("agent-desktop"))
 }
 

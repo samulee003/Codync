@@ -56,6 +56,8 @@ import coil3.compose.AsyncImage
 import com.codync.android.core.Bot
 import com.codync.android.core.ComputerSelection
 import com.codync.android.core.LinkState
+import com.codync.android.core.Stamina
+import com.codync.android.core.hasBoard
 import com.codync.android.core.mixesAgents
 import com.codync.android.core.runningAgent
 import com.codync.android.design.*
@@ -91,7 +93,9 @@ private class ComputerRoster(private val context: Context, val key: String) {
 @Composable internal fun BotListView(app: AccountContext, states: List<AppState>, accounts: AccountStore, account: () -> Unit, manage: () -> Unit,
     newBot: (String) -> Unit, newGroup: (String) -> Unit, edit: (String, Bot) -> Unit, extensions: (String) -> Unit, bottomInset: Dp) {
     var confirmDelete by remember { mutableStateOf<Pair<String, Bot>?>(null) }
-    var naming by remember { mutableStateOf<SectionNaming?>(null) }
+    var naming by remember { mutableStateOf<Naming?>(null) }
+    /** The computer whose team board is open. */
+    var board by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     var folded by remember { mutableStateOf(FoldedSections.load(context)) }
     var hidden by remember { mutableStateOf(RosterComputers.hidden(context)) }
@@ -140,6 +144,11 @@ private class ComputerRoster(private val context: Context, val key: String) {
                 ComputerFilterHeader(states, hidden, { hidden = it; RosterComputers.setHidden(context, it) },
                     { for (state in shown) accounts.store(state.computer.id)?.reconnect() }, manage)
             }
+            // Bots share a board per computer: the first connected one whose host has it (iOS `BoardTarget`).
+            online.firstOrNull { hasBoard(it.hello?.text("version")) }?.let { target ->
+                BoardButton { board = target.computer.id }
+                Spacer(Modifier.width(8.dp))
+            }
             // A new bot starts on the first computer online (its dialog can move it); a group chat gathers one computer's bots.
             NewMenuButton(enabled = available.isNotEmpty(), groupEnabled = online.isNotEmpty(),
                 { (online.firstOrNull() ?: available.firstOrNull())?.let { newBot(it.computer.id) } },
@@ -171,9 +180,9 @@ private class ComputerRoster(private val context: Context, val key: String) {
                 }
                 if (grouped && (movingComputer || id in collapsed)) continue
                 botLines(state, store, roster, folded, grouped, agentLogos, RosterActions(toggleSection,
-                    rename = { name -> naming = SectionNaming("Rename section", name) { renameSection(roster, store, name, it) } },
+                    rename = { name -> naming = Naming("Rename section", name) { renameSection(roster, store, name, it) } },
                     remove = { name -> renameSection(roster, store, name, null) },
-                    newSection = { bot -> naming = SectionNaming("New section", "") { store.setSection(bot.id, it) } },
+                    newSection = { bot -> naming = Naming("New section", "") { store.setSection(bot.id, it) } },
                     edit = { bot -> edit(id, bot) }, delete = { bot -> confirmDelete = id to bot }))
             }
         }
@@ -186,7 +195,12 @@ private class ComputerRoster(private val context: Context, val key: String) {
             confirmDelete?.let { (id, bot) -> accounts.store(id)?.deleteBot(bot) {} }
         })
     }
-    SectionNameDialog(naming) { naming = null }
+    NameDialog(naming, "Section name", { naming = null }, ::limitSectionName, ::sectionName)
+    CodyncSheet(board, { board = null }) { id ->
+        val state = states.firstOrNull { it.computer.id == id }
+        val store = accounts.store(id)
+        if (state != null && store != null) BoardView(state, store)
+    }
 }
 
 /** A computer's heading (and, while it needs one, its update notice) that drags to reorder the computers. */
@@ -340,7 +354,11 @@ private fun Bot.movesWith(other: Bot) = band == other.band && (pinned || section
 @Composable internal fun BotRow(bot: Bot, state: AppState, agent: AgentMark? = null) {
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        AvatarWithStatus(bot, state.bots, 46.dp, agent)
+        // Stamina sits under the avatar like a game character's (iOS `BotRow`); a group has no agent of its own.
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            AvatarWithStatus(bot, state.bots, 46.dp, agent)
+            if (bot.kind != "group") Stamina.of(state.usage, bot.backend)?.let { StaminaBar(it, 37.dp) }
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -418,6 +436,13 @@ internal fun messagePreview(text: String): String {
         .padding(start = 7.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         AccountAvatar(state, 30.dp)
         Symbol("chevron.down", size = 21.dp, tint = Palette.secondary)
+    }
+}
+
+@Composable private fun BoardButton(open: () -> Unit) {
+    val label = tr("Team board")
+    Box(Modifier.size(44.dp).glass(Capsule()).plainButton(action = open).semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+        Symbol("checklist", size = 22.dp, tint = Palette.text)
     }
 }
 

@@ -94,6 +94,17 @@ impl App {
                 }
             }
             Reply::Library(bot) => self.library_loaded(&bot, v["items"].as_array().map_or(&[], Vec::as_slice)),
+            Reply::Board => {
+                self.board_loaded(&v);
+                self.close_board_fields();
+            }
+            Reply::GoalSplit => {
+                self.close_board_fields();
+                let name = v["name"].as_str().unwrap_or("The lead bot");
+                self.flash(&format!("{name} is splitting it into tasks"));
+            }
+            // Its `task` event brings the change.
+            Reply::BoardChanged => {}
             Reply::Gear(backend) => {
                 let lists = super::gear::GearLists {
                     skills: super::gear::items(&v["skills"]),
@@ -123,11 +134,7 @@ impl App {
                     s(&v, "key")
                 );
                 super::super::app::copy(&text);
-                self.flash(if v["url"].is_string() {
-                    "Copied a curl command for the public URL (with its key)"
-                } else {
-                    "Copied a curl command (the cloud is off: this computer only)"
-                });
+                self.flash(webhook_copied(&v));
             }
             Reply::Registry { search, cursor } => self.with_market(|app, m| {
                 if !m.awaits(&search, cursor.as_deref()) {
@@ -266,13 +273,15 @@ impl App {
                     f.error = Some(e);
                 }
             }
-            Reply::FieldsSaved | Reply::SectionRenamed { .. } => match self.overlays.last_mut() {
-                Some(Overlay::Fields(f)) => {
-                    f.saving = false;
-                    f.error = Some(e);
+            Reply::FieldsSaved | Reply::SectionRenamed { .. } | Reply::GoalSplit | Reply::Board => {
+                match self.overlays.last_mut() {
+                    Some(Overlay::Fields(f)) => {
+                        f.saving = false;
+                        f.error = Some(e);
+                    }
+                    _ => self.flash(&e),
                 }
-                _ => self.flash(&e),
-            },
+            }
             Reply::Auth(backend) => {
                 for o in &mut self.overlays {
                     if let Overlay::Agent(a) = o
@@ -402,6 +411,7 @@ impl App {
                 Overlay::Library(l) => {
                     calls.push(("library", json!({"botId": l.bot}), After::Sheet(Reply::Library(l.bot.clone()))));
                 }
+                Overlay::Board(_) => calls.push(("tasks", json!({}), After::Sheet(Reply::Board))),
                 Overlay::Gear(gear) => gear_ids.push(gear.backend.clone()),
                 Overlay::Market(_) | Overlay::Form(_) => {
                     calls.push(("connectors", json!({}), After::Connectors));
@@ -439,6 +449,29 @@ impl App {
 }
 
 /// The entries in a host reply (`callEntries`, `botConversation`).
+/// What copying a routine's curl command says about where it works.
+fn webhook_copied(v: &Value) -> &'static str {
+    if v["url"].is_string() {
+        "Copied a curl command for the public URL (with its key)"
+    } else if v["needsAccount"] == true {
+        "Copied a curl command (not in an account: this computer only)"
+    } else {
+        "Copied a curl command (the cloud is off: this computer only)"
+    }
+}
+
 fn entries_of(v: &Value) -> Vec<Entry> {
     v["entries"].as_array().into_iter().flatten().filter_map(Entry::parse).map(|(_, e)| e).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_copied_webhook_says_where_it_works() {
+        assert!(webhook_copied(&json!({"url": "https://x"})).contains("public URL"));
+        assert!(webhook_copied(&json!({"url": null, "needsAccount": true})).contains("not in an account"));
+        assert!(webhook_copied(&json!({"url": null, "needsAccount": false})).contains("the cloud is off"));
+    }
 }

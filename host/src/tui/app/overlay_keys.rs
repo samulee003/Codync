@@ -51,12 +51,14 @@ impl App {
             Action::Memory => self.open_memory(),
             Action::Details => self.open_routines(),
             Action::Library => self.open_library(),
+            Action::Board => self.open_board(),
             Action::RefreshAgents => self.call("refreshBackends", json!({}), After::Backends),
             Action::Pair => self.open_pair(),
             Action::Network => self.open_network(),
             Action::Usage => self.overlays.push(Overlay::Usage(0)),
             Action::CheckUpdate => self.call("checkHostUpdate", json!({}), After::Update),
             Action::Analytics => self.toggle_analytics(),
+            Action::AutoOrder => self.toggle_auto_order(),
             Action::AboutAnalytics => self.overlays.push(Overlay::Analytics(AnalyticsSheet::default())),
             Action::Appearance(mode) => match super::super::appearance::select(mode) {
                 Ok(()) => self.flash(&format!("Appearance: {}", mode.name())),
@@ -66,6 +68,7 @@ impl App {
                 let title = super::super::l10n::cycle_language();
                 self.flash(title.as_ref());
             }
+            Action::ComputerDriver => self.toggle_computer_driver(),
             Action::ThinkingDetails => self.flash(if super::super::details::toggle() {
                 "Thinking details on: > unfolds a working bot's steps"
             } else {
@@ -123,7 +126,9 @@ impl App {
             Overlay::DevServers(sheet) => self.dev_servers_key(sheet, k),
             Overlay::Routines(l) => self.routines_key(l, k),
             Overlay::Routine(f) => self.routine_key(f, k),
+            Overlay::Computer(bot) => self.computer_key(bot, k),
             Overlay::Library(l) => self.library_key(l, k),
+            Overlay::Board(b) => self.board_key(b, k),
             Overlay::Gear(g) => Self::gear_key(g, k),
             Overlay::Market(m) => self.market_key(m, k),
             Overlay::Agent(a) => self.agent_key(a, k),
@@ -131,12 +136,17 @@ impl App {
             Overlay::Skill(s) => self.skill_key(s, k),
             Overlay::Analytics(s) => s.key(k),
             Overlay::Network(n) => self.network_key(n, k),
+            Overlay::WhatsNew(s) => s.key(k),
             // A phone that scanned the code waits for this computer to let it in.
-            o @ Overlay::Pair(_) if matches!(k.code, KeyCode::Char('y' | 'n')) && !self.pairing_requests.is_empty() => {
-                self.decide_pairing(k.code == KeyCode::Char('y'));
-                Some(o)
+            o @ Overlay::Pair(_)
+                if !self.pairing_requests.is_empty() && matches!(k.code, KeyCode::Char('y' | 'w' | 'n')) =>
+            {
+                self.decide_pairing(k.code);
+                // Answering the last question closes a sheet opened only for it.
+                (!(matches!(o, Overlay::Pair(PairCode::QuestionOnly)) && self.pairing_requests.is_empty())).then_some(o)
             }
             // A new code: after a failure, or in place of the one shown.
+            o @ Overlay::Pair(PairCode::QuestionOnly) if k.code == KeyCode::Char('r') => Some(o),
             Overlay::Pair(_) if k.code == KeyCode::Char('r') => {
                 self.request_pairing_code();
                 Some(Overlay::Pair(PairCode::Loading))

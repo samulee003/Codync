@@ -7,7 +7,10 @@
 
 mod agent;
 mod analytics;
+mod board;
+mod board_work;
 mod bot_chat;
+mod computer;
 mod dev_servers;
 mod fields;
 mod gear;
@@ -21,20 +24,24 @@ mod network_setup;
 mod pages;
 mod replies;
 mod routines;
+mod scroll;
 mod skill;
 mod when;
 
 pub use analytics::AnalyticsSheet;
+pub use board::{Column, column as task_column, heading as task_heading};
+pub use board_work::{awaits_answers, awaits_approval, waiting_titles};
 pub use dev_servers::{DevServer, DevServerSummary, DevServersSheet, LogsView, summary as dev_server_summary};
 pub use fields::{handoff_fields, section_fields};
 pub use gear::{Gear, GearRow};
 pub use icons::icon_fields;
 pub use library::{ArtifactTitles, LibraryItem};
-pub use memory::{MemoryMode, MemorySheet, Scroll, Section};
+pub use memory::{MemoryMode, MemorySheet, Section};
 pub use network::{NetReply, NetworkSheet, Recovery, Step};
 pub use network_rules::{RuleField, RuleForm};
 pub use network_setup::{CONNECTORS, Setup, SetupField};
 pub use pages::Page;
+pub use scroll::Scroll;
 pub use skill::SkillSheet;
 pub use when::complete_zone;
 
@@ -61,6 +68,12 @@ pub enum Reply {
     RoutineSaved,
     /// A bot's Library (`library {botId}`).
     Library(String),
+    /// The team board (`tasks`).
+    Board,
+    /// A board change; its `task` event updates the board.
+    BoardChanged,
+    /// `splitGoal`: who splits it.
+    GoalSplit,
     /// What an agent brings on its own (`agentGear`), for its sign-in sheet.
     Gear(String),
     /// A routine's webhook URL and key: copied as a ready-to-run curl.
@@ -109,6 +122,15 @@ pub struct BotChatSheet {
 }
 
 /// A bot's Library tab: its artifacts and the files shared in its chat, newest first.
+/// The team board: its tasks (`None` until `tasks` answers), the row under the cursor and the one unfolded.
+pub struct BoardSheet {
+    pub tasks: Option<Vec<crate::board::Task>>,
+    pub cursor: usize,
+    pub expanded: Option<String>,
+    /// Bots turned off from claiming open tasks on their own (`tasks`'s `optedOut`).
+    pub opted_out: Vec<String>,
+}
+
 pub struct Library {
     pub bot: String,
     pub items: Option<Vec<LibraryItem>>,
@@ -221,6 +243,25 @@ pub enum Submit {
     RenameArtifact {
         bot: String,
         artifact: String,
+    },
+    NewTask,
+    NoteTask(String),
+    /// A goal for the lead bot to split into tasks.
+    SplitGoal,
+    /// The bots in the choices, in order, and whether each claims tasks now: ↵ flips the chosen one.
+    BoardClaims(Vec<(String, bool)>),
+    /// A task and the bots its choices name, in order.
+    AssignTask {
+        task: String,
+        bots: Vec<String>,
+    },
+    /// The task whose proposed plan the user sends back with what to change.
+    RevisePlan(String),
+    /// A task's questions, asked one at a time: the task, its questions and the answers given so far.
+    AnswerQuestions {
+        task: String,
+        questions: Vec<String>,
+        answers: Vec<String>,
     },
 }
 

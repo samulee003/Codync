@@ -34,6 +34,8 @@ const LOCAL_ONLY: &[&str] = &[
     "checkHostUpdate",
     "setHostAutomaticUpdates",
     "setScreenEnabled",
+    // Which driver runs the bots' computer tools: set on the computer itself, like Remote screen.
+    "setComputerDriver",
     "requestScreenPermission",
     // Analytics is the computer owner's choice; phones decide only for themselves.
     "setAnalytics",
@@ -69,6 +71,8 @@ const LOCAL_ONLY: &[&str] = &[
     "pairingRequests",
     "decidePairing",
     "pairingCodeOpen",
+    // Names the other phones of this computer, which a phone has no business reading.
+    "joinWouldRemove",
     "cloudStatus",
     "setCloud",
     "setCloudUrl",
@@ -276,6 +280,8 @@ mod tests {
             assert!(permit(&both, m).is_err(), "{m} is loopback only");
         }
         assert!(permit(&both, "send").is_ok());
+        assert!(permit(&control, "joinWouldRemove").is_err(), "a phone doesn't learn the other phones' names");
+        assert!(permit(&control, "joinAccount").is_ok(), "a paired phone can ask to add the computer");
         assert!(permit(&both, "networkView").is_ok(), "phones read the network");
         assert!(permit(&both, "screenOffer").is_ok());
         assert!(permit(&both, "screenPrepare").is_ok());
